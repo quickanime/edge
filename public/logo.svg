@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="Edge">
+  <defs>
+    <linearGradient id="edgeDark" x1="120" y1="150" x2="400" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38A8FF"/>
+      <stop offset=".55" stop-color="#0A7CFF"/>
+      <stop offset="1" stop-color="#1341E8"/>
+    </linearGradient>
+    <linearGradient id="edgeLight" x1="90" y1="250" x2="420" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BFE2FF"/>
+      <stop offset=".5" stop-color="#69C0FF"/>
+      <stop offset="1" stop-color="#1E9BFF"/>
+    </linearGradient>
+  </defs>
+  <!-- govde: sol uc -> sag ust uc -> alt uc -> ic kirim -->
+  <path d="M96 236 L412 104 L296 424 L214 292 Z"
+        fill="url(#edgeDark)" stroke="url(#edgeDark)" stroke-width="30"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- ust yuz: isigi alan taraf -->
+  <path d="M96 236 L412 104 L214 292 Z"
+        fill="url(#edgeLight)" stroke="url(#edgeLight)" stroke-width="30"
+        stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

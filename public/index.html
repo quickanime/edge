@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Edge — uctan uca sifreli, koyu temali ekip mesajlasma platformu.">
+  <title>Edge</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- ============ giris / kayit ============ -->
+  <main id="gate" class="gate">
+    <section class="gate-card">
+      <header class="gate-head">
+        <img src="/logo.svg" alt="" class="gate-logo" width="56" height="56">
+        <h1>Edge</h1>
+        <p class="muted">Uctan uca sifreli ekip mesajlasmasi.</p>
+      </header>
+
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" data-gate-tab="login" role="tab">Giris</button>
+        <button class="tab" data-gate-tab="register" role="tab">Kayit</button>
+      </div>
+
+      <form id="login-form" class="form">
+        <label class="field">
+          <span>Nick</span>
+          <input name="nick" autocomplete="username" placeholder="nickin" required>
+        </label>
+        <label class="field">
+          <span>Parola</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn btn-primary" type="submit">Giris yap</button>
+      </form>
+
+      <form id="register-form" class="form is-hidden">
+        <label class="field">
+          <span>Nick</span>
+          <input name="nick" autocomplete="username" placeholder="3-24 karakter" required>
+          <small class="muted">Harf, rakam, nokta, alt cizgi ve tire.</small>
+        </label>
+        <label class="field">
+          <span>Gorunen ad</span>
+          <input name="displayName" placeholder="istege bagli">
+        </label>
+        <label class="field">
+          <span>Parola</span>
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+          <small class="muted">En az 8 karakter. Parola sunucuya gonderilmez; gizli anahtarini o acar.</small>
+        </label>
+        <button class="btn btn-primary" type="submit">Hesap olustur</button>
+      </form>
+
+      <form id="unlock-form" class="form is-hidden">
+        <p class="muted unlock-note">Oturum acik, anahtarlarin kilitli. Parolanla ac.</p>
+        <label class="field">
+          <span>Parola</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn btn-primary" type="submit">Kilidi ac</button>
+        <button class="btn btn-ghost" type="button" data-action="sign-out">Cikis yap</button>
+      </form>
+
+      <p id="gate-error" class="error" role="alert"></p>
+      <p class="gate-foot muted">Mesajlar cihazinda sifrelenir. Sunucu yalnizca sifreli veriyi saklar.</p>
+    </section>
+  </main>
+
+  <!-- ============ uygulama ============ -->
+  <div id="app" class="app is-hidden">
+    <!-- sol seritte kimlik ve sirketler -->
+    <nav class="rail">
+      <img src="/logo.svg" alt="Edge" class="rail-logo" width="30" height="30">
+      <button class="rail-btn is-active" data-nav="dm" title="Mesajlar" aria-label="Mesajlar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg>
+      </button>
+      <button class="rail-btn" data-nav="tasks" title="Gorevlerim" aria-label="Gorevlerim">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M4 12h11M4 17h7M18 6l2 2 3-3"/></svg>
+      </button>
+      <div class="rail-sep"></div>
+      <div id="rail-companies" class="rail-companies"></div>
+      <button class="rail-btn rail-add" data-action="new-company" title="Sirket olustur" aria-label="Sirket olustur">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="rail-btn rail-me" data-action="profile" title="Profil" aria-label="Profil">
+        <span id="rail-avatar" class="avatar avatar-sm"></span>
+      </button>
+    </nav>
+
+    <!-- orta liste -->
+    <aside class="side">
+      <header class="side-head">
+        <h2 id="side-title">Mesajlar</h2>
+        <button class="icon-btn" data-action="new-dm" title="Yeni sohbet" aria-label="Yeni sohbet">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </header>
+      <div class="side-search">
+        <input id="side-filter" type="search" placeholder="Ara" autocomplete="off">
+      </div>
+      <div id="side-list" class="side-list"></div>
+    </aside>
+
+    <!-- ana panel -->
+    <main id="main" class="main"></main>
+  </div>
+
+  <!-- ============ diyalog ============ -->
+  <div id="modal" class="modal is-hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <header class="modal-head">
+        <h3 id="modal-title"></h3>
+        <button class="icon-btn" data-action="close-modal" aria-label="Kapat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast is-hidden" role="status"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
