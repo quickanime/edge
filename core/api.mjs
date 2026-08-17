@@ -565,6 +565,7 @@ export function createApi(store) {
   /* ---- olay akisi (WebSocket yerine yoklama) ---- */
 
   route('GET', '/api/events', async ({ user, query }) => {
+    await limit(`events:${user.id}`, LIMITS.events);
     const cursor = String(query.cursor || '');
     // wait=saniye verilirse olay gelene kadar istek acik tutulur (bekleyen yoklama):
     // mesaj gecikmesi yarim saniyeye duser, bos beklemede istek sayisi dusuk kalir.
@@ -890,6 +891,7 @@ export function createApi(store) {
     const { company } = await requireCompany(invite.companyId, user.id, 'invites');
     if (company.groups.some((g) => g.slug === slug)) throw bad('A group link closes when the group is deleted.');
     await store.del(`inv/${slug}`);
+    for (const key of await store.list(`invclaim/${slug}/`)) await store.del(key);
     company.invites = (company.invites || []).filter((s) => s !== slug);
     await saveCompany(company);
     await logAction(company.id, user.id, 'invite:delete', `/${slug}`);
@@ -925,6 +927,23 @@ export function createApi(store) {
     if (invite.disabled || (invite.maxUses > 0 && invite.uses >= invite.maxUses)) throw bad('This invite link has been used up.');
     const company = await getCompany(invite.companyId);
     if (!company) throw missing('This invite is no longer valid.');
+
+    // Kullanim siniri: es zamanli isteklerde de asilmasin diye once "talep"
+    // kaydi yazilir, sonra sirali ilk N talep kazanir.
+    if (invite.maxUses > 0) {
+      const claimKey = `invclaim/${slug}/${seq()}-${user.id}`;
+      const existing = (await store.list(`invclaim/${slug}/`))
+        .filter((key) => key.endsWith(`-${user.id}`));
+      if (!existing.length) {
+        await store.set(claimKey, { userId: user.id, at: now() });
+        const claims = (await store.list(`invclaim/${slug}/`)).sort();
+        const rank = claims.findIndex((key) => key.endsWith(`-${user.id}`));
+        if (rank < 0 || rank >= invite.maxUses) {
+          await store.del(claimKey);
+          throw bad('This invite link has been used up.');
+        }
+      }
+    }
 
     let joined = false;
     if (!memberOf(company, user.id)) {

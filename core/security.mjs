@@ -80,7 +80,8 @@ export const LIMITS = {
   invite:     { max: 60,  windowMs: 3600000 },
   call:       { max: 400, windowMs: 60000 },
   avatar:     { max: 30,  windowMs: 3600000, message: 'Too many image uploads.' },
-  notice:     { max: 30,  windowMs: 60000 }
+  notice:     { max: 30,  windowMs: 60000 },
+  events:     { max: 240, windowMs: 60000 }
 };
 
 /* ------------------------------------------------------------------ */

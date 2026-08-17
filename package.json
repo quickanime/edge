@@ -8,7 +8,8 @@
     "start": "node server/dev.mjs",
     "dev": "node --watch server/dev.mjs",
     "test": "node tests/api.test.mjs",
-    "test:ui": "node tests/ui.test.mjs"
+    "test:ui": "node tests/ui.test.mjs",
+    "test:security": "node tests/security.test.mjs"
   },
   "engines": {
     "node": ">=20"
