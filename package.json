@@ -2,12 +2,11 @@
   "name": "edge",
   "version": "0.1.0",
   "private": true,
-  "description": "Edge \u2014 uctan uca sifreli, koyu temali ekip mesajlasma platformu",
-  "type": "commonjs",
-  "main": "server/index.js",
+  "description": "Edge \u2014 uctan uca sifreli, koyu temali ekip mesajlasma platformu (Netlify)",
+  "main": "server/dev.mjs",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
+    "start": "node server/dev.mjs",
+    "dev": "node --watch server/dev.mjs",
     "test": "node tests/api.test.mjs",
     "test:ui": "node tests/ui.test.mjs"
   },
@@ -15,8 +14,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.0",
-    "express": "^4.21.2",
-    "ws": "^8.19.0"
+    "@netlify/blobs": "^10.7.13"
   }
 }

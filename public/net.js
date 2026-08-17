@@ -1,10 +1,14 @@
-/** REST istekleri ve gercek zamanli baglanti. */
+/**
+ * Sunucu ile iletisim: REST istekleri + olay akisi.
+ *
+ * Netlify'da kalici WebSocket yoktur; bunun yerine "bekleyen yoklama" kullanilir:
+ * istek olay gelene kadar (en cok 6 sn) acik tutulur, olay gelince aninda doner.
+ * Boylece mesaj gecikmesi yarim saniye civarinda kalir, bos beklemede istek az olur.
+ */
 
 let token = localStorage.getItem('edge.token') || null;
 
-export function getToken() {
-  return token;
-}
+export const getToken = () => token;
 
 export function setToken(value) {
   token = value;
@@ -38,11 +42,13 @@ export const api = {
   del: (p) => request('DELETE', p)
 };
 
-/* ---- WebSocket ---------------------------------------------------- */
+/* ---- olay akisi ---- */
 
-let socket = null;
-let retry = 0;
 const listeners = new Set();
+let cursor = '';
+let running = false;
+let failures = 0;
+let urgent = false;      // gorusme sirasinda sinyaller icin daha sik yoklama
 
 export function onEvent(fn) {
   listeners.add(fn);
@@ -55,32 +61,36 @@ function emit(event) {
   }
 }
 
-export function connect() {
-  if (!token || (socket && socket.readyState <= 1)) return;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  socket = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-
-  socket.addEventListener('open', () => { retry = 0; emit({ type: 'socket:open' }); });
-  socket.addEventListener('message', (e) => {
-    try { emit(JSON.parse(e.data)); } catch { /* yoksay */ }
-  });
-  socket.addEventListener('close', () => {
-    socket = null;
-    emit({ type: 'socket:close' });
-    if (!token) return;
-    retry = Math.min(retry + 1, 6);
-    setTimeout(connect, 500 * 2 ** (retry - 1));
-  });
+export function setUrgent(value) {
+  urgent = Boolean(value);
 }
 
-export function disconnect() {
-  if (socket) {
-    const s = socket;
-    socket = null;
-    s.close();
+async function loop() {
+  while (running && token) {
+    try {
+      const wait = document.hidden && !urgent ? 8 : 6;
+      const res = await api.get(`/api/events?wait=${wait}&cursor=${encodeURIComponent(cursor)}`);
+      cursor = res.cursor || cursor;
+      failures = 0;
+      for (const event of res.events) emit(event);
+      if (!res.events.length && !urgent) await sleep(200);
+    } catch (err) {
+      if (err.status === 401) { emit({ type: 'session:invalid' }); return; }
+      failures = Math.min(failures + 1, 5);
+      await sleep(500 * 2 ** failures);
+    }
   }
 }
 
-export function socketSend(payload) {
-  if (socket && socket.readyState === 1) socket.send(JSON.stringify(payload));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function startEvents() {
+  if (running) return;
+  running = true;
+  loop();
+}
+
+export function stopEvents() {
+  running = false;
+  cursor = '';
 }

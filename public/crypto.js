@@ -114,10 +114,11 @@ async function sharedKey(peerPublicKeyB64) {
 }
 
 /**
- * Metni sifreler ve mesaj anahtarini her uye icin ayri sarar.
+ * Metni (ve varsa bir eki) sifreler; mesaj anahtarini her uye icin ayri sarar.
  * members: [{ id, publicKey }] — gonderenin kendisi de listede olmali.
+ * bytes verilirse ek, mesajla ayni anahtarla ama ayri IV ile sifrelenir.
  */
-export async function encryptMessage(text, members) {
+export async function encryptMessage(text, members, bytes = null) {
   const raw = randomBytes(32);
   const messageKey = await subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
   const iv = randomBytes(12);
@@ -131,19 +132,54 @@ export async function encryptMessage(text, members) {
     keys.push({ userId: member.id, iv: b64(wrapIv), wrapped: b64(wrapped) });
   }
 
-  return { iv: b64(iv), ciphertext: b64(ciphertext), keys };
+  const out = { iv: b64(iv), ciphertext: b64(ciphertext), keys };
+  if (bytes) {
+    const fileIv = randomBytes(12);
+    const encrypted = await subtle.encrypt({ name: 'AES-GCM', iv: fileIv }, messageKey, bytes);
+    out.file = { iv: b64(fileIv), data: b64(encrypted) };
+  }
+  return out;
 }
 
-/** message: { iv, ciphertext, key:{iv,wrapped} } — senderPublicKey ile acilir. */
-export async function decryptMessage(message, senderPublicKey) {
+async function openMessageKey(message, senderPublicKey, usages) {
   if (!message.key) throw new Error('Bu mesaj icin anahtar zarfi yok.');
   const sk = await sharedKey(senderPublicKey);
   const raw = await subtle.decrypt(
     { name: 'AES-GCM', iv: unb64(message.key.iv) }, sk, unb64(message.key.wrapped)
   );
-  const messageKey = await subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  return subtle.importKey('raw', raw, 'AES-GCM', false, usages);
+}
+
+/** message: { iv, ciphertext, key:{iv,wrapped} } — senderPublicKey ile acilir. */
+export async function decryptMessage(message, senderPublicKey) {
+  const messageKey = await openMessageKey(message, senderPublicKey, ['decrypt']);
   const plain = await subtle.decrypt(
     { name: 'AES-GCM', iv: unb64(message.iv) }, messageKey, unb64(message.ciphertext)
+  );
+  return dec.decode(plain);
+}
+
+/** Sifreli eki (foto) coz: mesajin anahtari ve ekin kendi IV'si kullanilir. */
+export async function decryptFile(message, senderPublicKey, dataB64, fileIv) {
+  const messageKey = await openMessageKey(message, senderPublicKey, ['decrypt']);
+  const plain = await subtle.decrypt(
+    { name: 'AES-GCM', iv: unb64(fileIv) }, messageKey, unb64(dataB64)
+  );
+  return new Uint8Array(plain);
+}
+
+/** Gorusme sinyalleri (SDP/ICE) de uctan uca sifreli tasinir. */
+export async function sealFor(publicKey, text) {
+  const sk = await sharedKey(publicKey);
+  const iv = randomBytes(12);
+  const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, sk, enc.encode(text));
+  return { iv: b64(iv), data: b64(ct) };
+}
+
+export async function openFrom(publicKey, sealed) {
+  const sk = await sharedKey(publicKey);
+  const plain = await subtle.decrypt(
+    { name: 'AES-GCM', iv: unb64(sealed.iv) }, sk, unb64(sealed.data)
   );
   return dec.decode(plain);
 }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Edge — uctan uca sifreli, koyu temali ekip mesajlasma platformu.">
+  <meta name="description" content="Edge — uctan uca sifreli ekip mesajlasmasi, sesli ve goruntulu gorusme, gorev ve toplanti yonetimi.">
   <title>Edge</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
@@ -12,85 +12,107 @@
 <body>
   <!-- ============ giris / kayit ============ -->
   <main id="gate" class="gate">
-    <section class="gate-card">
-      <header class="gate-head">
-        <img src="/logo.svg" alt="" class="gate-logo" width="56" height="56">
+    <div class="gate-grid">
+      <section class="gate-hero">
+        <div class="hero-mark">
+          <img src="/logo.svg" alt="" width="64" height="64">
+        </div>
         <h1>Edge</h1>
-        <p class="muted">Uctan uca sifreli ekip mesajlasmasi.</p>
-      </header>
+        <p class="hero-lead">Ekibin icin uctan uca sifreli mesajlasma, gorusme ve is takibi. Anahtarlar cihazinda kalir.</p>
+        <ul class="hero-list">
+          <li><span class="hero-ico" data-ico="lock"></span><div><strong>Uctan uca sifreleme</strong><small>Mesajlar, fotolar ve gorusme sinyalleri cihazda sifrelenir.</small></div></li>
+          <li><span class="hero-ico" data-ico="video"></span><div><strong>Sesli, goruntulu, ekran paylasimi</strong><small>4K'ya kadar kalite, dogrudan cihazdan cihaza.</small></div></li>
+          <li><span class="hero-ico" data-ico="users"></span><div><strong>Sirket, grup ve davet linki</strong><small>Tek tek eklemek yok: linki paylas, ekip katilsin.</small></div></li>
+          <li><span class="hero-ico" data-ico="check"></span><div><strong>Gorev ve toplanti</strong><small>Kisiye ya da gruba gorev ata, toplanti planla.</small></div></li>
+        </ul>
+      </section>
 
-      <div class="tabs" role="tablist">
-        <button class="tab is-active" data-gate-tab="login" role="tab">Giris</button>
-        <button class="tab" data-gate-tab="register" role="tab">Kayit</button>
-      </div>
+      <section class="gate-card">
+        <header class="gate-head">
+          <img src="/logo.svg" alt="" class="gate-logo" width="44" height="44">
+          <h2>Hos geldin</h2>
+          <p class="muted">Nickinle giris yap ya da yeni hesap olustur.</p>
+        </header>
 
-      <form id="login-form" class="form">
-        <label class="field">
-          <span>Nick</span>
-          <input name="nick" autocomplete="username" placeholder="nickin" required>
-        </label>
-        <label class="field">
-          <span>Parola</span>
-          <input name="password" type="password" autocomplete="current-password" required>
-        </label>
-        <button class="btn btn-primary" type="submit">Giris yap</button>
-      </form>
+        <div id="gate-invite" class="gate-invite is-hidden"></div>
 
-      <form id="register-form" class="form is-hidden">
-        <label class="field">
-          <span>Nick</span>
-          <input name="nick" autocomplete="username" placeholder="3-24 karakter" required>
-          <small class="muted">Harf, rakam, nokta, alt cizgi ve tire.</small>
-        </label>
-        <label class="field">
-          <span>Gorunen ad</span>
-          <input name="displayName" placeholder="istege bagli">
-        </label>
-        <label class="field">
-          <span>Parola</span>
-          <input name="password" type="password" autocomplete="new-password" minlength="8" required>
-          <small class="muted">En az 8 karakter. Parola sunucuya gonderilmez; gizli anahtarini o acar.</small>
-        </label>
-        <button class="btn btn-primary" type="submit">Hesap olustur</button>
-      </form>
+        <div id="gate-tabs" class="tabs" role="tablist">
+          <button class="tab is-active" data-gate-tab="login" role="tab" type="button">Giris</button>
+          <button class="tab" data-gate-tab="register" role="tab" type="button">Kayit</button>
+        </div>
 
-      <form id="unlock-form" class="form is-hidden">
-        <p class="muted unlock-note">Oturum acik, anahtarlarin kilitli. Parolanla ac.</p>
-        <label class="field">
-          <span>Parola</span>
-          <input name="password" type="password" autocomplete="current-password" required>
-        </label>
-        <button class="btn btn-primary" type="submit">Kilidi ac</button>
-        <button class="btn btn-ghost" type="button" data-action="sign-out">Cikis yap</button>
-      </form>
+        <form id="login-form" class="form">
+          <label class="field">
+            <span>Nick</span>
+            <input name="nick" autocomplete="username" placeholder="nickin" required>
+          </label>
+          <label class="field">
+            <span>Parola</span>
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="btn btn-primary btn-block" type="submit">Giris yap</button>
+        </form>
 
-      <p id="gate-error" class="error" role="alert"></p>
-      <p class="gate-foot muted">Mesajlar cihazinda sifrelenir. Sunucu yalnizca sifreli veriyi saklar.</p>
-    </section>
+        <form id="register-form" class="form is-hidden">
+          <label class="field">
+            <span>Nick</span>
+            <input name="nick" autocomplete="username" placeholder="3-24 karakter" required>
+            <small class="muted">Harf, rakam, nokta, alt cizgi ve tire.</small>
+          </label>
+          <label class="field">
+            <span>Gorunen ad</span>
+            <input name="displayName" placeholder="istege bagli">
+          </label>
+          <label class="field">
+            <span>Parola</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+            <small class="muted">En az 8 karakter. Parola sunucuya gonderilmez; gizli anahtarini o acar.</small>
+          </label>
+          <button class="btn btn-primary btn-block" type="submit">Hesap olustur</button>
+        </form>
+
+        <form id="unlock-form" class="form is-hidden">
+          <p class="muted">Oturum acik, anahtarlarin kilitli. Parolanla ac.</p>
+          <label class="field">
+            <span>Parola</span>
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="btn btn-primary btn-block" type="submit">Kilidi ac</button>
+          <button class="btn btn-ghost btn-block" type="button" data-action="sign-out">Cikis yap</button>
+        </form>
+
+        <p id="gate-error" class="error" role="alert"></p>
+        <p class="gate-foot muted">Sunucu yalnizca sifreli veriyi saklar. Parolani kaybedersen gecmis mesajlar acilamaz.</p>
+      </section>
+    </div>
   </main>
 
   <!-- ============ uygulama ============ -->
   <div id="app" class="app is-hidden">
-    <!-- sol seritte kimlik ve sirketler -->
     <nav class="rail">
-      <img src="/logo.svg" alt="Edge" class="rail-logo" width="30" height="30">
+      <img src="/logo.svg" alt="Edge" class="rail-logo" width="28" height="28">
       <button class="rail-btn is-active" data-nav="dm" title="Mesajlar" aria-label="Mesajlar">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg>
       </button>
+      <button class="rail-btn" data-nav="friends" title="Arkadaslar" aria-label="Arkadaslar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M8.5 6.5a2.5 2.5 0 105 0 2.5 2.5 0 10-5 0M18 8v6M15 11h6"/></svg>
+      </button>
       <button class="rail-btn" data-nav="tasks" title="Gorevlerim" aria-label="Gorevlerim">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M4 12h11M4 17h7M18 6l2 2 3-3"/></svg>
+      </button>
+      <button class="rail-btn" data-nav="meetings" title="Toplantilar" aria-label="Toplantilar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4zM8 3v4M16 3v4M4 11h16"/></svg>
       </button>
       <div class="rail-sep"></div>
       <div id="rail-companies" class="rail-companies"></div>
       <button class="rail-btn rail-add" data-action="new-company" title="Sirket olustur" aria-label="Sirket olustur">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button class="rail-btn rail-me" data-action="profile" title="Profil" aria-label="Profil">
-        <span id="rail-avatar" class="avatar avatar-sm"></span>
+      <button class="rail-btn rail-profile" data-action="profile" title="Profil" aria-label="Profil">
+        <span id="rail-me"></span>
       </button>
     </nav>
 
-    <!-- orta liste -->
     <aside class="side">
       <header class="side-head">
         <h2 id="side-title">Mesajlar</h2>
@@ -104,16 +126,17 @@
       <div id="side-list" class="side-list"></div>
     </aside>
 
-    <!-- ana panel -->
     <main id="main" class="main"></main>
   </div>
 
-  <!-- ============ diyalog ============ -->
+  <!-- ============ katmanlar ============ -->
+  <div id="ring" class="ring is-hidden" role="alert"></div>
+
   <div id="modal" class="modal is-hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <header class="modal-head">
         <h3 id="modal-title"></h3>
-        <button class="icon-btn" data-action="close-modal" aria-label="Kapat">
+        <button class="icon-btn" data-action="close-modal" aria-label="Kapat" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
