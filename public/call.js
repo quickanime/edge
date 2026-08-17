@@ -13,6 +13,7 @@
 import { api, setUrgent } from './net.js';
 import * as E2E from './crypto.js';
 import { h, icon, ICONS, avatarNode, initials } from './dom.js';
+import { t } from './i18n.js';
 
 const ICE = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -195,11 +196,11 @@ function dropPeer(userId) {
   if (state.peers.size === 0 && state.hadPeers) {
     if (state.autoEndWhenEmpty) {
       // Birebir gorusme: karsi taraf ayrildi, gorusmeyi kapat.
-      renderOverlay('Karsi taraf gorusmeden ayrildi');
+      renderOverlay(t('peer_left'));
       setTimeout(() => { if (state.active && state.peers.size === 0) endCall(); }, 1200);
       return;
     }
-    renderOverlay('Diger katilimcilar ayrildi');
+    renderOverlay(t('others_left'));
     return;
   }
   renderOverlay();
@@ -210,7 +211,7 @@ function dropPeer(userId) {
 /* ------------------------------------------------------------------ */
 
 export async function startCall({ target, kind = 'audio', title = '', quality = 'fhd', multi = false }) {
-  if (state.active) throw new Error('Zaten bir gorusmedesin.');
+  if (state.active) throw new Error(t('already_in_call'));
   state.quality = quality;
   state.autoEndWhenEmpty = !multi;
   state.hadPeers = false;
@@ -299,13 +300,17 @@ export function toggleCam() {
 /** Ekran paylasimi: video izini tum eslere degistir, birakinca kameraya don. */
 export async function toggleScreenShare() {
   if (state.sharing) return stopScreenShare();
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      frameRate: { ideal: 30, max: 60 },
-      width: { ideal: 3840 }, height: { ideal: 2160 }
-    },
-    audio: true
-  });
+  // Kaynak secimi kullanicida kalabilir; yanit gelmezse dugme kilitli kalmasin.
+  const stream = await Promise.race([
+    navigator.mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 30, max: 60 },
+        width: { ideal: 3840 }, height: { ideal: 2160 }
+      },
+      audio: true
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Screen sharing was not started.')), 30000))
+  ]);
   state.screenStream = stream;
   state.sharing = true;
   const screenTrack = stream.getVideoTracks()[0];
@@ -389,7 +394,7 @@ export async function handleEvent(event, lookupUser) {
     }
     case 'call:state': {
       if (event.state === 'declined' && state.active && event.roomId === state.roomId) {
-        renderOverlay(`${event.nick || 'Karsi taraf'} gorusmeyi reddetti`);
+        renderOverlay(t('call_declined', { name: event.nick || '' }).trim());
       }
       if (event.state === 'left') dropPeer(event.userId);
       if (state.ring && state.ring.roomId === event.roomId && event.state === 'left') {
@@ -457,44 +462,44 @@ export function renderOverlay(notice = '') {
   if (!root || !state.active) return;
 
   const tiles = h('div', { class: `tiles count-${Math.min(state.peers.size + 1, 6)}` }, [
-    videoTile(state.localStream, 'Sen', {
+    videoTile(state.localStream, t('you'), {
       muted: true,
       avatar: state.me && state.me.avatar,
-      sub: [!state.micOn ? 'mikrofon kapali' : '', state.sharing ? 'ekran paylasiyor' : ''].filter(Boolean).join(' · ')
+      sub: [!state.micOn ? t('mic_off') : '', state.sharing ? t('sharing_screen') : ''].filter(Boolean).join(' · ')
     }),
     ...[...state.peers.entries()].map(([userId, record]) => videoTile(record.stream, record.nick, {
       avatar: record.avatar,
-      sub: record.pc && record.pc.connectionState === 'connected' ? '' : 'baglaniyor...'
+      sub: record.pc && record.pc.connectionState === 'connected' ? '' : t('connecting')
     }))
   ]);
 
   const controls = h('div', { class: 'call-controls' }, [
     h('button', {
-      class: `call-btn${state.micOn ? '' : ' is-off'}`, title: 'Mikrofon', onClick: toggleMic
+      class: `call-btn${state.micOn ? '' : ' is-off'}`, title: t('mic'), onClick: toggleMic
     }, [icon(state.micOn ? ICONS.mic : ICONS.micOff, 20)]),
     state.kind === 'video' ? h('button', {
-      class: `call-btn${state.camOn ? '' : ' is-off'}`, title: 'Kamera', onClick: toggleCam
+      class: `call-btn${state.camOn ? '' : ' is-off'}`, title: t('camera'), onClick: toggleCam
     }, [icon(state.camOn ? ICONS.cam : ICONS.camOff, 20)]) : null,
     h('button', {
-      class: `call-btn${state.sharing ? ' is-on' : ''}`, title: 'Ekran paylas',
+      class: `call-btn${state.sharing ? ' is-on' : ''}`, title: t('share_screen'),
       onClick: () => toggleScreenShare().catch((err) => renderOverlay(err.message))
     }, [icon(ICONS.screen, 20)]),
     h('select', {
-      class: 'call-quality', title: 'Goruntu kalitesi',
+      class: 'call-quality', title: t('quality'),
       onChange: (e) => setQuality(e.target.value).catch(() => {})
     }, Object.entries(QUALITY).filter(([key]) => key !== 'auto').map(([key, q]) =>
       h('option', { value: key, text: q.label, selected: state.quality === key }))),
-    h('button', { class: 'call-btn is-end', title: 'Gorusmeyi bitir', onClick: endCall },
+    h('button', { class: 'call-btn is-end', title: t('end_call'), onClick: endCall },
       [icon(ICONS.hangup, 20)])
   ]);
 
   root.replaceChildren(h('div', { class: 'call-shell' }, [
     h('header', { class: 'call-head' }, [
       h('div', { class: 'grow' }, [
-        h('strong', { text: state.title || (state.kind === 'video' ? 'Goruntulu gorusme' : 'Sesli gorusme') }),
+        h('strong', { text: state.title || t(state.kind === 'video' ? 'call_video_title' : 'call_voice_title') }),
         h('div', { class: 'muted' }, [
           h('span', { id: 'call-timer', text: elapsed() }),
-          h('span', { text: ` · ${state.peers.size + 1} kisi · uctan uca sifreli` })
+          h('span', { text: ` · ${t('call_participants', { n: state.peers.size + 1 })}` })
         ])
       ]),
       notice ? h('span', { class: 'pill pill-warn', text: notice }) : null

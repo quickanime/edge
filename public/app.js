@@ -4,9 +4,10 @@ import * as E2E from './crypto.js';
 import { api, setToken, getToken, startEvents, stopEvents, onEvent } from './net.js';
 import { h, icon, ICONS, avatarNode, clear, relTime, dateTimeLabel } from './dom.js';
 import { toast, guard, openModal, closeModal, form, field, actions, emptyState, iconBtn, copyText } from './ui.js';
+import { t, getLang, setLang, applyStaticText } from './i18n.js';
 import * as store from './store.js';
 import { state } from './store.js';
-import { chatPane, renderTyping } from './chat.js';
+import { chatPane, renderTyping, captureComposer } from './chat.js';
 import { companyPane, meetingCard, meetingModal } from './panel.js';
 import { taskBoard } from './tasks.js';
 import { friendsPane, addFriendModal } from './friends.js';
@@ -59,9 +60,9 @@ $('#register-form').addEventListener('submit', async (e) => {
   const nick = f.nick.value.trim();
   const password = f.password.value;
   gateError('');
-  if (password.length < 8) return gateError('Parola en az 8 karakter olmali.');
+  if (password.length < 8) return gateError(t('password_short'));
 
-  busy(f, true, 'Anahtarlar uretiliyor...');
+  busy(f, true, t('generating_keys'));
   try {
     const identity = await E2E.generateIdentity();
     const kdfSalt = E2E.newKdfSalt();
@@ -93,7 +94,7 @@ $('#login-form').addEventListener('submit', async (e) => {
   const password = f.password.value;
   gateError('');
 
-  busy(f, true, 'Giris yapiliyor...');
+  busy(f, true, t('signing_in'));
   try {
     const params = await api.get(`/auth/params/${encodeURIComponent(nick)}`);
     const authHash = await E2E.deriveAuthHash(password, nick);
@@ -107,7 +108,7 @@ $('#login-form').addEventListener('submit', async (e) => {
     state.user = res.user;
     await startApp();
   } catch (err) {
-    gateError(err.name === 'OperationError' ? 'Parola hatali.' : err.message);
+    gateError(err.name === 'OperationError' ? t('password_wrong') : err.message);
   } finally {
     busy(f, false);
   }
@@ -119,7 +120,7 @@ $('#unlock-form').addEventListener('submit', async (e) => {
   const vault = loadVault();
   if (!vault) return signOut();
   gateError('');
-  busy(f, true, 'Aciliyor...');
+  busy(f, true, t('unlocking'));
   try {
     const kek = await E2E.deriveKek(f.password.value, vault.kdfSalt, vault.kdfIters);
     E2E.setPrivateKey(await E2E.openPrivateKey(vault.encPrivKey, kek));
@@ -127,7 +128,7 @@ $('#unlock-form').addEventListener('submit', async (e) => {
     f.reset();
     await startApp();
   } catch (err) {
-    gateError(err.name === 'OperationError' ? 'Parola hatali.' : err.message);
+    gateError(err.name === 'OperationError' ? t('password_wrong') : err.message);
   } finally {
     busy(f, false);
   }
@@ -168,12 +169,15 @@ async function showInviteBanner(link) {
       const { invite } = await api.get(`/api/invites/${encodeURIComponent(link.slug)}`);
       state.pendingInvite = invite.valid ? link.slug : null;
       box.replaceChildren(
-        h('span', { class: 'pill pill-accent', text: 'davet' }),
+        h('span', { class: 'pill pill-accent', text: t('invite_badge') }),
         h('div', { class: 'grow' }, [
           h('strong', { text: invite.companyName }),
           h('div', { class: 'muted', text: invite.valid
-            ? `${invite.groupName ? `${invite.groupName} grubuna` : 'sirkete'} katilmak icin giris yap · ${invite.memberCount} uye`
-            : 'Bu davet linki artik gecerli degil.' })
+            ? t('invite_gate_note', {
+              target: invite.groupName ? t('invite_gate_group', { name: invite.groupName }) : t('invite_gate_company'),
+              n: invite.memberCount
+            })
+            : t('invite_invalid') })
         ])
       );
       box.classList.remove('is-hidden');
@@ -184,7 +188,7 @@ async function showInviteBanner(link) {
         avatarNode(profile.nick, profile.avatar, { size: 'avatar-sm' }),
         h('div', { class: 'grow' }, [
           h('strong', { text: `@${profile.nick}` }),
-          h('div', { class: 'muted', text: 'Giris yaptiktan sonra arkadaslik istegi gonderebilirsin.' })
+          h('div', { class: 'muted', text: t('invite_profile_note') })
         ])
       );
       box.classList.remove('is-hidden');
@@ -209,8 +213,8 @@ async function consumePendingLink() {
       await store.loadCompany(res.companyId);
       store.notify();
       toast(res.joined
-        ? `${res.companyName} sirketine katildin${res.groupName ? ` · ${res.groupName}` : ''}.`
-        : `${res.companyName} sirketinde zaten uyesin.`);
+        ? t('joined_via_invite', { company: res.companyName, group: res.groupName ? ` · ${res.groupName}` : '' })
+        : t('already_member', { company: res.companyName }));
     });
   } else if (nick && nick !== state.user.nick) {
     addFriendModal(nick);
@@ -259,7 +263,7 @@ onEvent(async (event) => {
 
   switch (event.type) {
     case 'session:invalid':
-      toast('Oturum sona erdi, tekrar giris yap.', true);
+      toast(t('session_expired'), true);
       signOut();
       break;
 
@@ -278,9 +282,7 @@ onEvent(async (event) => {
       const conv = store.conversationById(event.conversationId);
       if (conv) conv.ttlSeconds = event.ttlSeconds;
       if (event.byNick !== state.user.nick) {
-        toast(event.ttlSeconds
-          ? `${event.byNick} gecici mesajlari acti.`
-          : `${event.byNick} gecici mesajlari kapatti.`);
+        toast(t(event.ttlSeconds ? 'someone_enabled_ttl' : 'someone_disabled_ttl', { name: event.byNick }));
       }
       render();
       break;
@@ -299,7 +301,7 @@ onEvent(async (event) => {
         }
         render();
       });
-      if (event.type === 'company:joined') toast(`${event.companyName || 'Bir sirkete'} eklendin.`);
+      if (event.type === 'company:joined') toast(t('joined_company', { name: event.companyName || '' }));
       break;
 
     case 'task:changed':
@@ -313,7 +315,7 @@ onEvent(async (event) => {
       break;
 
     case 'task:assigned':
-      toast(`Yeni gorev: ${event.title}`);
+      toast(t('new_task_toast', { title: event.title }));
       break;
 
     case 'meeting:changed':
@@ -327,17 +329,17 @@ onEvent(async (event) => {
       break;
 
     case 'meeting:invited':
-      toast(`Toplanti daveti: ${event.title} · ${dateTimeLabel(event.startsAt)}`);
+      toast(t('meeting_invite_toast', { title: event.title, when: dateTimeLabel(event.startsAt) }));
       break;
 
     case 'friend:request':
       await guard(async () => { await store.refreshFriends(); render(); });
-      toast(`${event.nick} arkadaslik istegi gonderdi.`);
+      toast(t('friend_requested_you', { nick: event.nick }));
       break;
 
     case 'friend:accepted':
       await guard(async () => { await store.refreshAll(); render(); });
-      toast(`${event.nick} istegini kabul etti.`);
+      toast(t('friend_accepted_you', { nick: event.nick }));
       break;
 
     case 'friend:changed':
@@ -395,10 +397,10 @@ call.onRing((ring) => {
     h('div', { class: 'ring-pulse' }, [icon(ring.kind === 'video' ? ICONS.video : ICONS.phone, 24)]),
     h('div', { class: 'grow' }, [
       h('strong', { text: ring.title || ring.fromNick }),
-      h('div', { class: 'muted', text: `${ring.fromNick} ${ring.kind === 'video' ? 'goruntulu' : 'sesli'} ariyor` })
+      h('div', { class: 'muted', text: t('incoming_call', { name: ring.fromNick, kind: t(ring.kind === 'video' ? 'kind_video' : 'kind_voice') }) })
     ]),
     h('button', {
-      class: 'btn btn-primary', text: 'Katil',
+      class: 'btn btn-primary', text: t('join'),
       onClick: () => guard(async () => {
         box.classList.add('is-hidden');
         call.setMe(state.user);
@@ -410,7 +412,7 @@ call.onRing((ring) => {
       })
     }),
     h('button', {
-      class: 'btn btn-danger-solid', text: 'Reddet',
+      class: 'btn btn-danger-solid', text: t('decline'),
       onClick: () => { box.classList.add('is-hidden'); call.declineCall(); }
     })
   ]));
@@ -482,14 +484,14 @@ function renderSide() {
   newBtn.classList.add('is-hidden');
 
   if (state.nav === 'dm') {
-    title.textContent = 'Mesajlar';
+    title.textContent = t('nav_messages');
     newBtn.classList.remove('is-hidden');
     const dms = state.conversations
       .filter((c) => c.kind === 'dm')
       .filter((c) => !filter || c.title.toLowerCase().includes(filter))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt);
     if (!dms.length) {
-      list.append(h('p', { class: 'muted note-pad', text: 'Henuz sohbet yok. Arkadas ekleyip sohbet baslatabilirsin.' }));
+      list.append(h('p', { class: 'muted note-pad', text: t('no_chats') }));
       return;
     }
     dms.forEach((conv) => list.append(conversationRow(conv)));
@@ -497,10 +499,10 @@ function renderSide() {
   }
 
   if (state.nav === 'friends') {
-    title.textContent = 'Arkadaslar';
+    title.textContent = t('friends_title');
     const rows = [...state.friends.incoming, ...state.friends.friends];
     if (!rows.length) {
-      list.append(h('p', { class: 'muted note-pad', text: 'Arkadas listesi bos.' }));
+      list.append(h('p', { class: 'muted note-pad', text: t('friend_list_empty') }));
       return;
     }
     for (const row of rows) {
@@ -510,7 +512,7 @@ function renderSide() {
         avatarNode(row.user.nick, row.user.avatar, { online: row.user.online }),
         h('div', { class: 'row-body' }, [
           h('div', { class: 'row-title' }, [h('strong', { text: row.user.nick })]),
-          h('div', { class: 'row-sub', text: row.state === 'pending-in' ? 'istek bekliyor' : row.user.displayName })
+          h('div', { class: 'row-sub', text: row.state === 'pending-in' ? t('request_pending') : row.user.displayName })
         ]),
         row.state === 'pending-in' ? h('span', { class: 'count', text: '1' }) : null
       ]));
@@ -519,7 +521,7 @@ function renderSide() {
   }
 
   if (state.nav === 'tasks') {
-    title.textContent = 'Gorevlerim';
+    title.textContent = t('nav_tasks');
     const counts = {
       open: state.myTasks.filter((t) => t.status !== 'done').length,
       todo: state.myTasks.filter((t) => t.status === 'todo').length,
@@ -527,7 +529,7 @@ function renderSide() {
       done: state.myTasks.filter((t) => t.status === 'done').length,
       all: state.myTasks.length
     };
-    for (const [key, label] of [['open', 'Acik gorevler'], ['todo', 'Yapilacak'], ['doing', 'Devam eden'], ['done', 'Bitenler'], ['all', 'Tumu']]) {
+    for (const [key, label] of [['open', t('filter_open')], ['todo', t('filter_todo')], ['doing', t('filter_doing')], ['done', t('filter_done')], ['all', t('filter_all')]]) {
       list.append(h('button', {
         class: `row${state.taskFilter === key ? ' is-active' : ''}`,
         onClick: () => { state.taskFilter = key; render(); }
@@ -540,10 +542,10 @@ function renderSide() {
   }
 
   if (state.nav === 'meetings') {
-    title.textContent = 'Toplantilar';
+    title.textContent = t('nav_meetings');
     const list2 = state.myMeetings.filter((m) => m.status !== 'cancelled');
     if (!list2.length) {
-      list.append(h('p', { class: 'muted note-pad', text: 'Planli toplanti yok.' }));
+      list.append(h('p', { class: 'muted note-pad', text: t('no_meetings') }));
       return;
     }
     for (const meeting of list2) {
@@ -553,7 +555,7 @@ function renderSide() {
           h('div', { class: 'row-title' }, [h('strong', { text: meeting.title })]),
           h('div', { class: 'row-sub', text: `${dateTimeLabel(meeting.startsAt)} · ${meeting.companyName}` })
         ]),
-        meeting.status === 'live' ? h('span', { class: 'pill pill-danger', text: 'canli' }) : null
+        meeting.status === 'live' ? h('span', { class: 'pill pill-danger', text: t('live') }) : null
       ]));
     }
     return;
@@ -561,7 +563,7 @@ function renderSide() {
 
   // sirket
   const detail = state.companyDetail;
-  title.textContent = detail ? detail.company.name : 'Yukleniyor...';
+  title.textContent = detail ? detail.company.name : `${t('loading')}…`;
   if (!detail) return;
 
   list.append(h('button', {
@@ -570,15 +572,15 @@ function renderSide() {
   }, [
     avatarNode(detail.company.name, detail.company.logo, { accent: true }),
     h('div', { class: 'row-body' }, [
-      h('div', { class: 'row-title' }, [h('strong', { text: 'Yonetim paneli' })]),
-      h('div', { class: 'row-sub', text: `${detail.members.length} uye · ${detail.groups.length} grup` })
+      h('div', { class: 'row-title' }, [h('strong', { text: t('admin_panel') })]),
+      h('div', { class: 'row-sub', text: `${t('members_n', { n: detail.members.length })} · ${detail.groups.length} ${t('groups').toLowerCase()}` })
     ])
   ]));
 
   const mine = detail.groups.filter((g) => g.isMember && g.convId)
     .filter((g) => !filter || g.name.toLowerCase().includes(filter));
-  list.append(h('div', { class: 'side-group-label', text: 'Kanallar' }));
-  if (!mine.length) list.append(h('p', { class: 'muted note-pad-sm', text: 'Uye oldugun grup yok.' }));
+  list.append(h('div', { class: 'side-group-label', text: t('channels') }));
+  if (!mine.length) list.append(h('p', { class: 'muted note-pad-sm', text: t('no_groups_joined') }));
   for (const group of mine) {
     const conv = store.conversationById(group.convId);
     if (conv) list.append(conversationRow(conv, group.name));
@@ -603,9 +605,9 @@ function conversationRow(conv, overrideTitle) {
       h('div', { class: 'row-title' }, [h('strong', { text: overrideTitle || conv.title })]),
       h('div', {
         class: `row-sub${isTyping ? ' is-typing' : ''}`,
-        text: isTyping ? 'yaziyor...'
-          : conv.kind === 'group' ? `${conv.members.length} uye`
-            : (online ? 'cevrimici' : 'cevrimdisi')
+        text: isTyping ? t('typing_short')
+          : conv.kind === 'group' ? t('members_n', { n: conv.members.length })
+            : t(online ? 'online' : 'offline')
       })
     ]),
     h('div', { class: 'row-meta' }, [
@@ -616,6 +618,7 @@ function conversationRow(conv, overrideTitle) {
 }
 
 function renderMain() {
+  captureComposer();
   const main = clear($('#main'));
   const conv = store.activeConversation();
 
@@ -625,19 +628,19 @@ function renderMain() {
   if (conv) return main.append(chatPane(conv));
   if (state.nav === 'dm') {
     return main.append(emptyState(
-      'Uctan uca sifreli sohbet',
-      'Soldan bir sohbet sec, ya da arkadas ekleyip yeni bir sohbet baslat.',
+      t('empty_chat_title'),
+      t('empty_chat_sub'),
       h('button', { class: 'btn btn-primary', onClick: () => { state.nav = 'friends'; render(); } }, [
-        icon(ICONS.friends, 15), 'Arkadas ekle'
+        icon(ICONS.friends, 15), t('add_friend')
       ])
     ));
   }
-  if (!state.companyDetail) return main.append(emptyState('Yukleniyor', 'Sirket bilgileri getiriliyor.'));
+  if (!state.companyDetail) return main.append(emptyState(t('loading'), t('loading_company')));
   return main.append(companyPane(state.companyDetail));
 }
 
 function myTasksPane() {
-  const labels = { open: 'Acik gorevler', todo: 'Yapilacak', doing: 'Devam eden', done: 'Bitenler', all: 'Tum gorevler' };
+  const labels = { open: t('filter_open'), todo: t('filter_todo'), doing: t('filter_doing'), done: t('filter_done'), all: t('filter_all') };
   const tasks = state.myTasks.filter((t) => {
     if (state.taskFilter === 'all') return true;
     if (state.taskFilter === 'open') return t.status !== 'done';
@@ -646,10 +649,10 @@ function myTasksPane() {
 
   return h('div', { class: 'pane' }, [
     h('header', { class: 'pane-head' }, [
-      iconBtn(ICONS.back, 'Liste', () => app.classList.add('show-list'), 'only-narrow'),
+      iconBtn(ICONS.back, t('list'), () => app.classList.add('show-list'), 'only-narrow'),
       h('div', { class: 'grow' }, [
         h('h3', { text: labels[state.taskFilter] }),
-        h('p', { class: 'muted', text: 'Sana ve uyesi oldugun gruplara atanan gorevler' })
+        h('p', { class: 'muted', text: t('my_tasks_sub') })
       ])
     ]),
     h('div', { class: 'pane-body' }, [taskBoard(tasks, null)])
@@ -662,10 +665,10 @@ function myMeetingsPane() {
 
   return h('div', { class: 'pane' }, [
     h('header', { class: 'pane-head' }, [
-      iconBtn(ICONS.back, 'Liste', () => app.classList.add('show-list'), 'only-narrow'),
+      iconBtn(ICONS.back, t('list'), () => app.classList.add('show-list'), 'only-narrow'),
       h('div', { class: 'grow' }, [
-        h('h3', { text: 'Toplantilar' }),
-        h('p', { class: 'muted', text: `${list.length} planli toplanti` })
+        h('h3', { text: t('nav_meetings') }),
+        h('p', { class: 'muted', text: t('meetings_count', { n: list.length }) })
       ]),
       manageable.length ? h('button', {
         class: 'btn btn-sm btn-primary',
@@ -673,12 +676,12 @@ function myMeetingsPane() {
           const detail = await store.loadCompany(manageable[0].id);
           meetingModal(detail);
         })
-      }, [icon(ICONS.plus, 15), 'Toplanti planla']) : null
+      }, [icon(ICONS.plus, 15), t('schedule_meeting')]) : null
     ]),
     h('div', { class: 'pane-body' }, [
       list.length
         ? h('div', { class: 'cards' }, list.map((meeting) => meetingCard(meeting, null, false)))
-        : emptyState('Toplanti yok', 'Bir sirkette toplanti planlandiginda burada gorunur.')
+        : emptyState(t('meetings_empty'), t('meetings_empty_mine'))
     ])
   ]);
 }
@@ -688,35 +691,35 @@ function myMeetingsPane() {
 /* ================================================================== */
 
 function companyModal() {
-  openModal('Sirket olustur', (close) => {
-    const name = h('input', { placeholder: 'Sirket adi', required: true, maxlength: 60 });
+  openModal(t('create_company'), (close) => {
+    const name = h('input', { placeholder: t('company_name'), required: true, maxlength: 60 });
     return form(() => guard(async () => {
       const res = await api.post('/api/companies', { name: name.value });
       close();
       await store.refreshAll();
       await selectCompany(res.company.id);
-      toast('Sirket olusturuldu. Davet linki: /' + res.company.slug);
+      toast(t('company_created', { slug: res.company.slug }));
     }), [
-      field('Sirket adi', name),
-      h('p', { class: 'muted', text: 'Sahibi sen olursun: uye ekler, grup acar, gorev atar, yetkileri belirlersin. Sirket icin otomatik bir davet linki uretilir.' }),
-      actions(close, 'Olustur')
+      field(t('company_name'), name),
+      h('p', { class: 'muted', text: t('company_create_note') }),
+      actions(close, t('create'))
     ]);
   });
 }
 
 function dmModal() {
-  openModal('Yeni sohbet', (close) => {
+  openModal(t('new_chat'), (close) => {
     const results = h('div', { class: 'check-list' });
-    const input = h('input', { placeholder: 'nick ara', autocomplete: 'off', onInput: (e) => search(e.target.value) });
+    const input = h('input', { placeholder: t('search_nick'), autocomplete: 'off', onInput: (e) => search(e.target.value) });
     let timer;
 
     function search(q) {
       clearTimeout(timer);
       timer = setTimeout(() => guard(async () => {
         clear(results);
-        if (q.trim().length < 2) return results.append(h('p', { class: 'muted', text: 'En az 2 karakter yaz.' }));
+        if (q.trim().length < 2) return results.append(h('p', { class: 'muted', text: t('type_2_chars') }));
         const res = await api.get(`/api/users?q=${encodeURIComponent(q.trim())}`);
-        if (!res.users.length) return results.append(h('p', { class: 'muted', text: 'Kullanici bulunamadi.' }));
+        if (!res.users.length) return results.append(h('p', { class: 'muted', text: t('no_user_found') }));
         for (const user of res.users) {
           results.append(h('button', {
             class: 'check-row', type: 'button',
@@ -742,22 +745,22 @@ function dmModal() {
 
     search('');
     return [
-      field('Kullanici', input, 'Sohbet icin arkadas olmaniz ya da ayni sirkette olmaniz gerekir.'),
+      field(t('user'), input, t('dm_hint')),
       results,
-      h('div', { class: 'modal-actions' }, [h('button', { class: 'btn btn-ghost', text: 'Kapat', onClick: close })])
+      h('div', { class: 'modal-actions' }, [h('button', { class: 'btn btn-ghost', text: t('close'), onClick: close })])
     ];
   });
 }
 
 async function profileModal() {
   const fingerprint = await E2E.fingerprint(state.user.publicKey);
-  openModal('Profil', (close) => {
+  openModal(t('profile'), (close) => {
     const displayName = h('input', { value: state.user.displayName, maxlength: 40 });
     const avatarBox = h('div', { class: 'avatar-edit' }, [
       avatarNode(state.user.nick, state.user.avatar, { size: 'avatar-xl', accent: true }),
       h('div', { class: 'stack' }, [
         h('button', {
-          class: 'btn btn-sm', type: 'button', text: 'Foto sec',
+          class: 'btn btn-sm', type: 'button', text: t('pick_photo'),
           onClick: () => guard(async () => {
             const file = await pickFile('image/*');
             if (!file) return;
@@ -766,11 +769,11 @@ async function profileModal() {
             state.user = res.user;
             close();
             render();
-            toast('Profil fotosu guncellendi.');
+            toast(t('photo_updated'));
           })
         }),
         state.user.avatar ? h('button', {
-          class: 'btn btn-sm btn-ghost', type: 'button', text: 'Kaldir',
+          class: 'btn btn-sm btn-ghost', type: 'button', text: t('remove'),
           onClick: () => guard(async () => {
             const res = await api.post('/api/me/avatar', { dataUrl: null });
             state.user = res.user;
@@ -786,28 +789,44 @@ async function profileModal() {
       state.user = res.user;
       close();
       render();
-      toast('Profil guncellendi.');
+      toast(t('profile_updated'));
     }), [
       avatarBox,
       h('div', { class: 'card-head' }, [
         h('div', { class: 'grow' }, [
           h('div', { class: 'card-title', text: `@${state.user.nick}` }),
-          h('div', { class: 'muted', text: 'Nick degistirilemez.' })
+          h('div', { class: 'muted', text: t('nick_fixed') })
         ]),
         h('button', {
-          class: 'btn btn-sm', type: 'button', text: 'Profil linki',
-          onClick: () => copyText(`${location.origin}/u/${state.user.nick}`, 'Profil linkin kopyalandi.')
+          class: 'btn btn-sm', type: 'button', text: t('profile_link'),
+          onClick: () => copyText(`${location.origin}/u/${state.user.nick}`, t('profile_link_copied'))
         })
       ]),
-      field('Gorunen ad', displayName),
-      field('Anahtar parmak izin', h('div', { class: 'fp', text: fingerprint }),
-        'Karsi tarafla ayni goruyorsaniz sohbet dogrulanmis demektir.'),
-      actions(close, 'Kaydet', h('button', {
-        class: 'btn btn-danger', type: 'button', text: 'Cikis yap',
+      field(t('display_name'), displayName),
+      field(t('language'), languageSelect(), t('language_hint')),
+      field(t('fingerprint'), h('div', { class: 'fp', text: fingerprint }), t('fingerprint_hint')),
+      actions(close, t('save'), h('button', {
+        class: 'btn btn-danger', type: 'button', text: t('sign_out'),
         onClick: () => { close(); signOut(); }
       }))
     ]);
   });
+}
+
+/** Dil secimi: hemen uygulanir ve secim cihazda saklanir. */
+function languageSelect() {
+  return h('select', {
+    onChange: (e) => {
+      setLang(e.target.value);
+      applyStaticText();
+      closeModal();
+      render();
+      toast(t('profile_updated'));
+    }
+  }, [
+    h('option', { value: 'en', text: t('english'), selected: getLang() === 'en' }),
+    h('option', { value: 'tr', text: t('turkish'), selected: getLang() === 'tr' })
+  ]);
 }
 
 document.addEventListener('click', (e) => {
@@ -838,4 +857,5 @@ $('#side-filter').addEventListener('input', (e) => {
   renderSide();
 });
 
+applyStaticText();
 boot();

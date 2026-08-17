@@ -2,19 +2,20 @@
 
 import { h, icon, ICONS, avatarNode } from './dom.js';
 import { guard, openModal, form, field, actions, confirmModal, emptyState, toast } from './ui.js';
+import { t } from './i18n.js';
 import * as store from './store.js';
 import { state } from './store.js';
 
 export const COLUMNS = [
-  { key: 'todo', label: 'Yapilacak' },
-  { key: 'doing', label: 'Devam eden' },
-  { key: 'done', label: 'Biten' }
+  { key: 'todo', label: 'tasks_todo' },
+  { key: 'doing', label: 'tasks_doing' },
+  { key: 'done', label: 'tasks_done' }
 ];
 
 const PRIORITY = {
-  low: { label: 'Dusuk', cls: 'prio-low' },
-  normal: { label: 'Normal', cls: 'prio-normal' },
-  high: { label: 'Yuksek', cls: 'prio-high' }
+  low: { label: 'prio_low', cls: 'prio-low' },
+  normal: { label: 'prio_normal', cls: 'prio-normal' },
+  high: { label: 'prio_high', cls: 'prio-high' }
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -49,12 +50,12 @@ export function taskBoard(tasks, detail = null) {
     }, [
       h('header', { class: 'board-head' }, [
         h('span', { class: 'board-dot' }),
-        h('h5', { text: column.label }),
+        h('h5', { text: t(column.label) }),
         h('span', { class: 'pill', text: String(items.length) })
       ]),
       items.length
         ? h('div', { class: 'board-items' }, items.map((task) => taskCard(task, detail, canManage)))
-        : h('p', { class: 'board-empty', text: 'Bos' })
+        : h('p', { class: 'board-empty', text: t('empty') })
     ]);
     return columnEl;
   }));
@@ -62,8 +63,8 @@ export function taskBoard(tasks, detail = null) {
   return h('div', { class: 'task-view' }, [
     h('div', { class: 'task-summary' }, [
       h('div', { class: 'grow' }, [
-        h('strong', { text: `${tasks.length} gorev` }),
-        h('div', { class: 'muted', text: `${done} tamamlandi · ${tasks.length - done} acik` })
+        h('strong', { text: t('task_count', { n: tasks.length }) }),
+        h('div', { class: 'muted', text: t('task_progress', { done, open: tasks.length - done }) })
       ]),
       h('div', { class: 'progress', title: `%${percent}` }, [
         h('i', { class: `progress-fill p${Math.round(percent / 5) * 5}` })
@@ -71,9 +72,9 @@ export function taskBoard(tasks, detail = null) {
       h('span', { class: 'progress-label', text: `%${percent}` }),
       canManage ? h('button', {
         class: 'btn btn-sm btn-primary', onClick: () => taskModal(detail)
-      }, [icon(ICONS.plus, 15), 'Gorev']) : null
+      }, [icon(ICONS.plus, 15), t('task')]) : null
     ]),
-    tasks.length ? board : emptyState('Gorev yok', 'Bu listede gorunecek bir gorev bulunmuyor.')
+    tasks.length ? board : emptyState(t('task_empty'), t('task_empty_sub'))
   ]);
 }
 
@@ -94,7 +95,7 @@ export function taskCard(task, detail, canManage) {
     h('div', { class: 'tcard-top' }, [
       h('button', {
         class: `task-check${task.status === 'done' ? ' is-done' : ''}`,
-        title: task.status === 'done' ? 'Geri al' : 'Bitti isaretle',
+        title: t(task.status === 'done' ? 'mark_undone' : 'mark_done'),
         onClick: () => guard(() => store.updateTask(task, { status: task.status === 'done' ? 'todo' : 'done' }))
       }, [icon(ICONS.check, 12)]),
       h('h6', { class: 'tcard-title', text: task.title })
@@ -110,32 +111,32 @@ export function taskCard(task, detail, canManage) {
             avatarNode(task.assigneeNick, null, { size: 'avatar-xs' }),
             `@${task.assigneeNick}`
           ])
-          : h('span', { class: 'chip chip-dim', text: 'atanmadi' }),
+          : h('span', { class: 'chip chip-dim', text: t('unassigned') }),
       task.dueDate ? h('span', {
-        class: `chip${overdue ? ' chip-danger' : ''}`, title: 'Son tarih'
+        class: `chip${overdue ? ' chip-danger' : ''}`, title: t('due_date')
       }, [icon(ICONS.calendar, 12), task.dueDate]) : null,
-      task.priority === 'high' ? h('span', { class: 'chip chip-danger', text: 'yuksek' }) : null,
+      task.priority === 'high' ? h('span', { class: 'chip chip-danger', text: t('prio_high').toLowerCase() }) : null,
       !detail && task.companyName ? h('span', { class: 'chip chip-dim', text: task.companyName }) : null
     ]),
 
     h('div', { class: 'tcard-actions' }, [
       h('button', {
-        class: 'btn btn-xs', title: 'Sonraki adima tasi',
-        text: task.status === 'done' ? 'Yeniden ac' : task.status === 'todo' ? 'Basla' : 'Bitir',
+        class: 'btn btn-xs',
+        text: t(task.status === 'done' ? 'reopen' : task.status === 'todo' ? 'start' : 'finish'),
         onClick: () => guard(() => store.updateTask(task, { status: nextStatus }))
       }),
       canManage ? h('button', {
-        class: 'btn btn-xs', text: 'Duzenle', onClick: () => taskModal(detail, task)
+        class: 'btn btn-xs', text: t('edit'), onClick: () => taskModal(detail, task)
       }) : null,
       canManage ? h('button', {
-        class: 'btn btn-xs btn-danger', text: 'Sil',
-        onClick: () => confirmModal('Gorev silinsin mi?', task.title, async () => {
+        class: 'btn btn-xs btn-danger', text: t('delete'),
+        onClick: () => confirmModal(t('delete_task_q'), task.title, async () => {
           const { api } = await import('./net.js');
           await api.del(`/api/tasks/${task.id}`);
           await store.refreshTasks();
           await store.loadCompany(task.companyId);
           store.notify();
-          toast('Gorev silindi.');
+          toast(t('task_deleted'));
         })
       }) : null
     ])
@@ -146,28 +147,28 @@ export function taskCard(task, detail, canManage) {
 
 export function taskModal(detail, task) {
   const editing = Boolean(task && task.id);
-  openModal(editing ? 'Gorevi duzenle' : 'Gorev olustur', (close) => {
-    const title = h('input', { value: task ? task.title : '', placeholder: 'Ne yapilacak?', required: true, maxlength: 120 });
-    const desc = h('textarea', { placeholder: 'Detay (istege bagli)', maxlength: 2000 });
+  openModal(t(editing ? 'edit_task' : 'create_task'), (close) => {
+    const title = h('input', { value: task ? task.title : '', placeholder: t('task_title_ph'), required: true, maxlength: 120 });
+    const desc = h('textarea', { placeholder: t('task_desc_ph'), maxlength: 2000 });
     desc.value = task && task.description ? task.description : '';
 
     const current = task
       ? (task.assigneeGroupId ? `g:${task.assigneeGroupId}` : task.assigneeUserId ? `u:${task.assigneeUserId}` : '')
       : '';
     const assignee = h('select', {}, [
-      h('option', { value: '', text: 'Atanmadi', selected: !current }),
+      h('option', { value: '', text: t('unassigned'), selected: !current }),
       ...detail.groups.map((g) => h('option', {
-        value: `g:${g.id}`, text: `Grup — ${g.name}`, selected: current === `g:${g.id}`
+        value: `g:${g.id}`, text: t('group_prefix', { name: g.name }), selected: current === `g:${g.id}`
       })),
       ...detail.members.map((m) => h('option', {
-        value: `u:${m.id}`, text: `Kisi — ${m.nick}`, selected: current === `u:${m.id}`
+        value: `u:${m.id}`, text: t('person_prefix', { name: m.nick }), selected: current === `u:${m.id}`
       }))
     ]);
     const priority = h('select', {}, Object.entries(PRIORITY).map(([key, p]) => h('option', {
-      value: key, text: p.label, selected: (task ? task.priority : 'normal') === key
+      value: key, text: t(p.label), selected: (task ? task.priority : 'normal') === key
     })));
     const status = h('select', {}, COLUMNS.map((c) => h('option', {
-      value: c.key, text: c.label, selected: (task ? task.status : 'todo') === c.key
+      value: c.key, text: t(c.label), selected: (task ? task.status : 'todo') === c.key
     })));
     const due = h('input', { type: 'date', value: task && task.dueDate ? task.dueDate : '' });
 
@@ -190,19 +191,19 @@ export function taskModal(detail, task) {
       await store.loadCompany(detail.company.id);
       state.companyTab = 'tasks';
       store.notify();
-      toast(editing ? 'Gorev guncellendi.' : 'Gorev olusturuldu.');
+      toast(t(editing ? 'task_updated' : 'task_created'));
     }), [
-      field('Baslik', title),
-      field('Aciklama', desc),
+      field(t('task_title'), title),
+      field(t('description'), desc),
       h('div', { class: 'grid-2' }, [
-        field('Atanan', assignee),
-        field('Oncelik', priority)
+        field(t('assignee'), assignee),
+        field(t('priority'), priority)
       ]),
       h('div', { class: 'grid-2' }, [
-        field('Durum', status),
-        field('Son tarih', due)
+        field(t('status'), status),
+        field(t('due_date'), due)
       ]),
-      actions(close, editing ? 'Kaydet' : 'Olustur')
+      actions(close, t(editing ? 'save' : 'create'))
     ]);
   });
 }

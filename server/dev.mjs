@@ -36,7 +36,7 @@ function readBody(req) {
     let data = '';
     req.on('data', (chunk) => {
       data += chunk;
-      if (data.length > 2_000_000) reject(new Error('Govde cok buyuk.'));
+      if (data.length > 2_000_000) reject(new Error('Request body is too large.'));
     });
     req.on('end', () => resolve(data));
     req.on('error', reject);
@@ -47,7 +47,7 @@ async function serveStatic(res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
   const target = path.join(publicDir, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!target.startsWith(publicDir)) {
-    res.writeHead(403).end('yasak');
+    res.writeHead(403).end('forbidden');
     return;
   }
   try {
@@ -82,7 +82,7 @@ const server = http.createServer(async (req, res) => {
       if (raw) {
         try { body = JSON.parse(raw); } catch {
           res.writeHead(400, { 'content-type': 'application/json' })
-            .end(JSON.stringify({ error: 'Gecersiz JSON.' }));
+            .end(JSON.stringify({ error: 'Invalid JSON.' }));
           return;
         }
       }

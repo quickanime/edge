@@ -88,7 +88,7 @@ export function createApi(store) {
     const rows = (await Promise.all(slice.map((k) => store.get(k)))).filter(Boolean);
     return Promise.all(rows.map(async (row) => {
       const actor = await getUser(row.actorId);
-      return { ...row, actorNick: actor ? actor.nick : 'silinmis', actorAvatar: actor ? actor.avatar || null : null };
+      return { ...row, actorNick: actor ? actor.nick : 'deleted', actorAvatar: actor ? actor.avatar || null : null };
     }));
   }
 
@@ -122,8 +122,8 @@ export function createApi(store) {
 
   function checkImage(dataUrl) {
     if (dataUrl === null || dataUrl === '') return null;
-    if (typeof dataUrl !== 'string' || !IMAGE_RE.test(dataUrl)) throw bad('Gecersiz gorsel bicimi.');
-    if (dataUrl.length > MAX_AVATAR) throw bad('Gorsel cok buyuk; daha kucuk bir dosya sec.');
+    if (typeof dataUrl !== 'string' || !IMAGE_RE.test(dataUrl)) throw bad('Unsupported image format.');
+    if (dataUrl.length > MAX_AVATAR) throw bad('Image is too large; pick a smaller file.');
     return dataUrl;
   }
 
@@ -137,15 +137,15 @@ export function createApi(store) {
   async function authUser(headers) {
     const raw = headers.authorization || headers.Authorization || '';
     const t = raw.replace(/^Bearer\s+/i, '').trim();
-    if (!t) throw new HttpError(401, 'Oturum gerekli.');
+    if (!t) throw new HttpError(401, 'Session required.');
     const session = await store.get(`sess/${t}`);
-    if (!session) throw new HttpError(401, 'Oturum gecersiz.');
+    if (!session) throw new HttpError(401, 'Session is invalid.');
     if (now() - session.createdAt > SESSION_TTL) {
       await store.del(`sess/${t}`);
-      throw new HttpError(401, 'Oturum suresi doldu, tekrar giris yap.');
+      throw new HttpError(401, 'Session expired, please sign in again.');
     }
     const user = await getUser(session.userId);
-    if (!user) throw new HttpError(401, 'Oturum gecersiz.');
+    if (!user) throw new HttpError(401, 'Session is invalid.');
     return user;
   }
 
@@ -164,27 +164,27 @@ export function createApi(store) {
 
   async function requireCompany(companyId, userId, perm) {
     const company = await getCompany(companyId);
-    if (!company) throw missing('Sirket bulunamadi.');
+    if (!company) throw missing('Company not found.');
     const member = memberOf(company, userId);
-    if (!member) throw denied('Bu sirkete uye degilsin.');
-    if (perm && !can(company, userId, perm)) throw denied('Bu islem icin yetkin yok.');
+    if (!member) throw denied('You are not a member of this company.');
+    if (perm && !can(company, userId, perm)) throw denied('You do not have permission for this action.');
     return { company, member };
   }
 
   async function companyByGroup(groupId, userId, perm) {
     const companyId = await store.get(`gidx/${groupId}`);
-    if (!companyId) throw missing('Grup bulunamadi.');
+    if (!companyId) throw missing('Group not found.');
     const { company, member } = await requireCompany(companyId, userId, perm);
     const group = company.groups.find((g) => g.id === groupId);
-    if (!group) throw missing('Grup bulunamadi.');
+    if (!group) throw missing('Group not found.');
     return { company, member, group };
   }
 
   async function uniqueSlug(preferred) {
     if (preferred) {
       const slug = String(preferred).toLowerCase();
-      if (!SLUG_RE.test(slug)) throw bad('Link kimligi 3-32 karakter, kucuk harf/rakam/tire olmali.');
-      if (await store.get(`inv/${slug}`)) throw bad('Bu link kimligi kullanimda.');
+      if (!SLUG_RE.test(slug)) throw bad('Link ids are 3-32 characters: lowercase letters, numbers and hyphens.');
+      if (await store.get(`inv/${slug}`)) throw bad('That link id is already in use.');
       return slug;
     }
     for (let i = 0; i < 12; i++) {
@@ -290,8 +290,8 @@ export function createApi(store) {
 
   async function requireConv(convId, userId) {
     const conv = await getConv(convId);
-    if (!conv) throw missing('Sohbet bulunamadi.');
-    if (!conv.members.includes(userId)) throw denied('Bu sohbete erisimin yok.');
+    if (!conv) throw missing('Conversation not found.');
+    if (!conv.members.includes(userId)) throw denied('You do not have access to this conversation.');
     return conv;
   }
 
@@ -360,7 +360,7 @@ export function createApi(store) {
     await store.set(probe, { ok: true });
     const back = await store.get(probe);
     await store.del(probe);
-    return { ok: Boolean(back && back.ok), store: 'hazir' };
+    return { ok: Boolean(back && back.ok), store: 'ready' };
   }, { open: true });
 
   /* ---- kimlik ---- */
@@ -371,10 +371,10 @@ export function createApi(store) {
     const displayName = cleanText(body.displayName, 40) || nick;
     const { authHash, kdfSalt, publicKey, encPrivKey } = body;
 
-    if (!NICK_RE.test(nick)) throw bad('Nick 3-24 karakter olmali; harf, rakam, _ . - kullanilabilir.');
-    if (!isB64(authHash, 500) || !isB64(kdfSalt, 500) || !isB64(publicKey, 4000)) throw bad('Anahtar bilgileri eksik.');
-    if (!encPrivKey || !isB64(encPrivKey.iv, 500) || !isB64(encPrivKey.ciphertext, 20000)) throw bad('Sifreli gizli anahtar eksik.');
-    if (await store.get(`nick/${nick.toLowerCase()}`)) throw bad('Bu nick alinmis.');
+    if (!NICK_RE.test(nick)) throw bad('Nicknames are 3-24 characters: letters, numbers, _ . - are allowed.');
+    if (!isB64(authHash, 500) || !isB64(kdfSalt, 500) || !isB64(publicKey, 4000)) throw bad('Key material is missing.');
+    if (!encPrivKey || !isB64(encPrivKey.iv, 500) || !isB64(encPrivKey.ciphertext, 20000)) throw bad('Encrypted private key is missing.');
+    if (await store.get(`nick/${nick.toLowerCase()}`)) throw bad('That nickname is taken.');
 
     const authSalt = crypto.randomBytes(16).toString('base64');
     const user = {
@@ -414,10 +414,10 @@ export function createApi(store) {
     if (!user) {
       // Var olmayan kullanicida da ayni islem maliyeti odenir.
       burnCompare(await serverSecret(store));
-      throw bad('Nick veya parola hatali.');
+      throw bad('Wrong nickname or password.');
     }
     if (!isB64(body.authHash, 500) || !safeEqual(hashAuth(body.authHash, user.authSalt), user.authHash)) {
-      throw bad('Nick veya parola hatali.');
+      throw bad('Wrong nickname or password.');
     }
     const sessionToken = token();
     await store.set(`sess/${sessionToken}`, { userId: user.id, createdAt: now() });
@@ -441,7 +441,7 @@ export function createApi(store) {
 
   route('PATCH', '/api/me', async ({ user, body }) => {
     const displayName = cleanText(body.displayName, 40);
-    if (!displayName) throw bad('Gorunen ad bos olamaz.');
+    if (!displayName) throw bad('Display name cannot be empty.');
     user.displayName = displayName;
     await saveUser(user);
     return { user: publicUser(user) };
@@ -461,7 +461,7 @@ export function createApi(store) {
     await limit(`search:${user.id}`, LIMITS.search);
     const targetId = await store.get(`nick/${assertNickish(params.nick).toLowerCase()}`);
     const target = targetId && await getUser(targetId);
-    if (!target) throw missing('Kullanici bulunamadi.');
+    if (!target) throw missing('User not found.');
     return {
       profile: {
         ...publicUser(target),
@@ -525,12 +525,12 @@ export function createApi(store) {
     const nick = cleanText(body.nick, 24).toLowerCase();
     const targetId = await store.get(`nick/${nick}`);
     const target = targetId && await getUser(targetId);
-    if (!target) throw bad('Kullanici bulunamadi.');
-    if (target.id === user.id) throw bad('Kendine istek gonderemezsin.');
+    if (!target) throw bad('User not found.');
+    if (target.id === user.id) throw bad('You cannot send a request to yourself.');
 
     const existing = await friendState(user.id, target.id);
-    if (existing === 'accepted') throw bad('Zaten arkadassiniz.');
-    if (existing === 'pending-out') throw bad('Istek zaten gonderildi.');
+    if (existing === 'accepted') throw bad('You are already friends.');
+    if (existing === 'pending-out') throw bad('A request was already sent.');
 
     if (existing === 'pending-in') {
       // Karsi taraf zaten istek gondermis: dogrudan kabul et.
@@ -548,7 +548,7 @@ export function createApi(store) {
 
   route('POST', '/api/friends/:userId/accept', async ({ user, params }) => {
     const state = await friendState(user.id, params.userId);
-    if (state !== 'pending-in') throw bad('Bekleyen bir istek yok.');
+    if (state !== 'pending-in') throw bad('There is no pending request.');
     await store.set(friendKey(user.id, params.userId), { state: 'accepted', at: now() });
     await store.set(friendKey(params.userId, user.id), { state: 'accepted', at: now() });
     await emit([params.userId], { type: 'friend:accepted', userId: user.id, nick: user.nick });
@@ -605,7 +605,7 @@ export function createApi(store) {
   route('POST', '/api/companies', async ({ user, body }) => {
     await limit(`company:${user.id}`, LIMITS.company);
     const name = cleanText(body.name, 60);
-    if (name.length < 2) throw bad('Sirket adi en az 2 karakter olmali.');
+    if (name.length < 2) throw bad('Company name must be at least 2 characters.');
     const slug = await uniqueSlug(body.slug || null);
     const company = {
       id: id(), name, slug, ownerId: user.id, createdAt: now(),
@@ -659,9 +659,9 @@ export function createApi(store) {
 
   route('PATCH', '/api/companies/:id', async ({ user, params, body }) => {
     const { company } = await requireCompany(params.id, user.id);
-    if (company.ownerId !== user.id) throw denied('Yalnizca sirket sahibi degistirebilir.');
+    if (company.ownerId !== user.id) throw denied('Only the company owner can change this.');
     const name = cleanText(body.name, 60);
-    if (name.length < 2) throw bad('Sirket adi en az 2 karakter olmali.');
+    if (name.length < 2) throw bad('Company name must be at least 2 characters.');
     company.name = name;
     await saveCompany(company);
     await logAction(company.id, user.id, 'company:rename', name);
@@ -671,7 +671,7 @@ export function createApi(store) {
 
   route('DELETE', '/api/companies/:id', async ({ user, params }) => {
     const { company } = await requireCompany(params.id, user.id);
-    if (company.ownerId !== user.id) throw denied('Yalnizca sirket sahibi silebilir.');
+    if (company.ownerId !== user.id) throw denied('Only the company owner can delete this.');
 
     for (const group of company.groups) {
       if (!group.convId) continue;
@@ -696,8 +696,8 @@ export function createApi(store) {
     const nick = cleanText(body.nick, 24).toLowerCase();
     const targetId = await store.get(`nick/${nick}`);
     const target = targetId && await getUser(targetId);
-    if (!target) throw bad('Kullanici bulunamadi.');
-    if (memberOf(company, target.id)) throw bad('Bu kullanici zaten uye.');
+    if (!target) throw bad('User not found.');
+    if (memberOf(company, target.id)) throw bad('That user is already a member.');
 
     const role = body.role === 'admin' ? 'admin' : 'member';
     company.members.push({
@@ -715,13 +715,13 @@ export function createApi(store) {
 
   route('PATCH', '/api/companies/:id/members/:userId', async ({ user, params, body }) => {
     const { company } = await requireCompany(params.id, user.id);
-    if (company.ownerId !== user.id) throw denied('Rol ve yetkileri yalnizca sirket sahibi degistirir.');
+    if (company.ownerId !== user.id) throw denied('Only the company owner can change roles and permissions.');
     const member = memberOf(company, params.userId);
-    if (!member) throw missing('Uye bulunamadi.');
-    if (member.role === 'owner') throw bad('Sirket sahibinin yetkileri degistirilemez.');
+    if (!member) throw missing('Member not found.');
+    if (member.role === 'owner') throw bad('The owner\u2019s permissions cannot be changed.');
 
     if (body.role !== undefined) {
-      if (!['admin', 'member'].includes(body.role)) throw bad('Gecersiz rol.');
+      if (!['admin', 'member'].includes(body.role)) throw bad('Invalid role.');
       member.role = body.role;
     }
     if (body.perms !== undefined || body.role === 'member') {
@@ -738,9 +738,9 @@ export function createApi(store) {
   route('DELETE', '/api/companies/:id/members/:userId', async ({ user, params }) => {
     const { company } = await requireCompany(params.id, user.id);
     const isSelf = params.userId === user.id;
-    if (!isSelf && !can(company, user.id, 'members')) throw denied('Bu islem icin yetkin yok.');
-    if (params.userId === company.ownerId) throw bad('Sirket sahibi cikarilamaz.');
-    if (!memberOf(company, params.userId)) throw missing('Uye bulunamadi.');
+    if (!isSelf && !can(company, user.id, 'members')) throw denied('You do not have permission for this action.');
+    if (params.userId === company.ownerId) throw bad('The owner cannot be removed.');
+    if (!memberOf(company, params.userId)) throw missing('Member not found.');
 
     for (const group of company.groups) {
       if (!group.members.includes(params.userId)) continue;
@@ -764,7 +764,7 @@ export function createApi(store) {
   route('POST', '/api/companies/:id/groups', async ({ user, params, body }) => {
     const { company } = await requireCompany(params.id, user.id, 'groups');
     const name = cleanText(body.name, 60);
-    if (name.length < 2) throw bad('Grup adi en az 2 karakter olmali.');
+    if (name.length < 2) throw bad('Group name must be at least 2 characters.');
 
     const requested = Array.isArray(body.memberIds) ? body.memberIds : [];
     const members = [...new Set([user.id, ...requested])]
@@ -797,7 +797,7 @@ export function createApi(store) {
     const { company, group } = await companyByGroup(params.groupId, user.id, 'groups');
     if (body.name !== undefined) {
       const name = cleanText(body.name, 60);
-      if (name.length < 2) throw bad('Grup adi en az 2 karakter olmali.');
+      if (name.length < 2) throw bad('Group name must be at least 2 characters.');
       group.name = name;
     }
     if (body.description !== undefined) group.description = cleanText(body.description, 200);
@@ -829,7 +829,7 @@ export function createApi(store) {
   route('POST', '/api/groups/:groupId/members', async ({ user, params, body }) => {
     const { company, group } = await companyByGroup(params.groupId, user.id, 'groups');
     const targetId = String(body.userId || '');
-    if (!memberOf(company, targetId)) throw bad('Kullanici bu sirkete uye degil.');
+    if (!memberOf(company, targetId)) throw bad('That user is not a member of this company.');
     if (!group.members.includes(targetId)) {
       group.members.push(targetId);
       await syncGroupConv(company, group);
@@ -845,7 +845,7 @@ export function createApi(store) {
 
   route('DELETE', '/api/groups/:groupId/members/:userId', async ({ user, params }) => {
     const companyId = await store.get(`gidx/${params.groupId}`);
-    if (!companyId) throw missing('Grup bulunamadi.');
+    if (!companyId) throw missing('Group not found.');
     const isSelf = params.userId === user.id;
     const { company, group } = await companyByGroup(params.groupId, user.id, isSelf ? null : 'groups');
     const left = await getUser(params.userId);
@@ -864,7 +864,7 @@ export function createApi(store) {
   route('POST', '/api/companies/:id/invites', async ({ user, params, body }) => {
     await limit(`invite:${user.id}`, LIMITS.invite);
     const { company } = await requireCompany(params.id, user.id, 'invites');
-    if (body.groupId && !company.groups.some((g) => g.id === body.groupId)) throw bad('Grup bu sirkete ait degil.');
+    if (body.groupId && !company.groups.some((g) => g.id === body.groupId)) throw bad('That group does not belong to this company.');
     const slug = await uniqueSlug(body.slug || null);
     const role = body.role === 'admin' ? 'admin' : 'member';
     const invite = {
@@ -886,9 +886,9 @@ export function createApi(store) {
   route('DELETE', '/api/invites/:slug', async ({ user, params }) => {
     const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
-    if (!invite) throw missing('Davet bulunamadi.');
+    if (!invite) throw missing('Invite not found.');
     const { company } = await requireCompany(invite.companyId, user.id, 'invites');
-    if (company.groups.some((g) => g.slug === slug)) throw bad('Grup linki grup silinince kapanir.');
+    if (company.groups.some((g) => g.slug === slug)) throw bad('A group link closes when the group is deleted.');
     await store.del(`inv/${slug}`);
     company.invites = (company.invites || []).filter((s) => s !== slug);
     await saveCompany(company);
@@ -902,9 +902,9 @@ export function createApi(store) {
     await limit(`invpeek:${ip}`, LIMITS.search);
     const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
-    if (!invite) throw missing('Davet bulunamadi veya kapatilmis.');
+    if (!invite) throw missing('Invite not found or revoked.');
     const company = await getCompany(invite.companyId);
-    if (!company) throw missing('Davet artik gecerli degil.');
+    if (!company) throw missing('This invite is no longer valid.');
     const group = invite.groupId ? company.groups.find((g) => g.id === invite.groupId) : null;
     const host = await getUser(invite.createdBy);
     const exhausted = invite.disabled || (invite.maxUses > 0 && invite.uses >= invite.maxUses);
@@ -921,10 +921,10 @@ export function createApi(store) {
     await limit(`join:${user.id}`, LIMITS.join);
     const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
-    if (!invite) throw missing('Davet bulunamadi.');
-    if (invite.disabled || (invite.maxUses > 0 && invite.uses >= invite.maxUses)) throw bad('Davet linki dolmus.');
+    if (!invite) throw missing('Invite not found.');
+    if (invite.disabled || (invite.maxUses > 0 && invite.uses >= invite.maxUses)) throw bad('This invite link has been used up.');
     const company = await getCompany(invite.companyId);
-    if (!company) throw missing('Davet artik gecerli degil.');
+    if (!company) throw missing('This invite is no longer valid.');
 
     let joined = false;
     if (!memberOf(company, user.id)) {
@@ -967,13 +967,13 @@ export function createApi(store) {
 
   route('POST', '/api/conversations/dm', async ({ user, body }) => {
     const otherId = String(body.userId || '');
-    if (otherId === user.id) throw bad('Kendinle sohbet baslatamazsin.');
+    if (otherId === user.id) throw bad('You cannot start a conversation with yourself.');
     const other = await getUser(otherId);
-    if (!other) throw bad('Kullanici bulunamadi.');
+    if (!other) throw bad('User not found.');
 
     // Sohbet icin arkadas olmak ya da ayni sirkette bulunmak gerekir.
     if (!(await areFriends(user.id, otherId)) && !(await shareCompany(user.id, otherId))) {
-      throw denied('Once arkadaslik istegi gonder ya da ayni sirkete katil.');
+      throw denied('Send a friend request first, or join the same company.');
     }
 
     const dmKey = [user.id, otherId].sort().join(':');
@@ -995,7 +995,7 @@ export function createApi(store) {
       id: message.id,
       conversationId: convId,
       senderId: message.senderId,
-      senderNick: sender ? sender.nick : 'silinmis',
+      senderNick: sender ? sender.nick : 'deleted',
       senderAvatar: sender ? sender.avatar || null : null,
       system: message.system || null,
       iv: message.iv || null,
@@ -1038,33 +1038,39 @@ export function createApi(store) {
 
     const system = body.system === 'screenshot' ? 'screenshot' : null;
     if (!system) {
-      if (!isB64(body.iv, 200) || !isB64(body.ciphertext, MAX_CIPHERTEXT)) throw bad('Sifreli govde gecersiz.');
-      if (!Array.isArray(body.keys) || !body.keys.length) throw bad('Anahtar zarflari eksik.');
+      if (!isB64(body.iv, 200) || !isB64(body.ciphertext, MAX_CIPHERTEXT)) throw bad('Encrypted body is invalid.');
+      if (!Array.isArray(body.keys) || !body.keys.length) throw bad('Key envelopes are missing.');
     }
     if (Array.isArray(body.keys) && body.keys.length > MAX_KEY_ENVELOPES) {
-      throw bad('Cok fazla anahtar zarfi.');
+      throw bad('Too many key envelopes.');
     }
 
     const keys = {};
     for (const k of (Array.isArray(body.keys) ? body.keys : [])) {
       if (!k || typeof k !== 'object' || typeof k.userId !== 'string') continue;
       if (!conv.members.includes(k.userId)) continue;
-      if (!isB64(k.iv, 200) || !isB64(k.wrapped, 4000)) throw bad('Anahtar zarfi gecersiz.');
+      if (!isB64(k.iv, 200) || !isB64(k.wrapped, 4000)) throw bad('A key envelope is invalid.');
       keys[k.userId] = { iv: k.iv, wrapped: k.wrapped };
     }
 
     let attachment = null;
     if (body.attachment) {
       const a = body.attachment;
-      if (!a || typeof a !== 'object') throw bad('Ek bilgisi gecersiz.');
-      const blobId = assertId(a.blobId, 'ek kimligi');
-      if (!(await store.get(`blob/${conv.id}/${blobId}`))) throw bad('Ek bulunamadi.');
+      if (!a || typeof a !== 'object') throw bad('Attachment metadata is invalid.');
+      const blobId = assertId(a.blobId, 'attachment id');
+      if (!(await store.get(`blob/${conv.id}/${blobId}`))) throw bad('Attachment not found.');
       if (!isB64(a.iv, 200)) throw bad('Ek anahtar bilgisi gecersiz.');
+      const mime = typeof a.mime === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(a.mime)
+        ? a.mime.slice(0, 100)
+        : 'application/octet-stream';
+      const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime);
       attachment = {
         blobId,
         iv: a.iv,
-        mime: ['image/jpeg', 'image/png', 'image/webp'].includes(a.mime) ? a.mime : 'image/jpeg',
-        name: cleanText(a.name, 80),
+        // Gorseller tarayicida gosterilir; digerleri yalnizca indirilebilir dosya olarak durur.
+        mime: isImage ? mime : 'application/octet-stream',
+        kind: isImage && a.kind !== 'file' ? 'image' : 'file',
+        name: cleanText(a.name, 120) || 'file',
         size: Number(a.size) || 0,
         width: Number(a.width) || 0,
         height: Number(a.height) || 0
@@ -1097,7 +1103,7 @@ export function createApi(store) {
   route('POST', '/api/conversations/:id/blobs', async ({ user, params, body }) => {
     await limit(`upload:${user.id}`, LIMITS.upload);
     const conv = await requireConv(params.id, user.id);
-    if (!isB64(body.data, MAX_BLOB_B64)) throw bad('Dosya gecersiz veya cok buyuk (en cok ~4 MB).');
+    if (!isB64(body.data, MAX_BLOB_B64)) throw bad('File is invalid or too large (about 4 MB max).');
     const blobId = id();
     await store.set(`blob/${conv.id}/${blobId}`, { data: body.data, uploadedBy: user.id, at: now() });
     return { blobId };
@@ -1106,7 +1112,7 @@ export function createApi(store) {
   route('GET', '/api/conversations/:id/blobs/:blobId', async ({ user, params }) => {
     const conv = await requireConv(params.id, user.id);
     const blob = await store.get(`blob/${conv.id}/${params.blobId}`);
-    if (!blob) throw missing('Ek bulunamadi.');
+    if (!blob) throw missing('Attachment not found.');
     return { data: blob.data };
   });
 
@@ -1114,7 +1120,7 @@ export function createApi(store) {
   route('POST', '/api/conversations/:id/ttl', async ({ user, params, body }) => {
     const conv = await requireConv(params.id, user.id);
     const seconds = Number(body.seconds);
-    if (!Number.isFinite(seconds) || seconds < 0 || seconds > 604800) throw bad('Gecersiz sure.');
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > 604800) throw bad('Invalid duration.');
     conv.ttlSeconds = Math.floor(seconds);
     await saveConv(conv);
     await emit(conv.members, {
@@ -1132,7 +1138,7 @@ export function createApi(store) {
   route('POST', '/api/conversations/:id/notice', async ({ user, params, body }) => {
     await limit(`notice:${user.id}`, LIMITS.notice);
     const conv = await requireConv(params.id, user.id);
-    if (body.kind !== 'screenshot') throw bad('Bilinmeyen bildirim.');
+    if (body.kind !== 'screenshot') throw bad('Unknown notice.');
     const createdAt = now();
     const message = { id: id(), senderId: user.id, system: 'screenshot', keys: {}, createdAt, expiresAt: 0 };
     await store.set(`m/${conv.id}/${String(createdAt).padStart(14, '0')}-${message.id.slice(0, 6)}`, message);
@@ -1161,10 +1167,10 @@ export function createApi(store) {
   route('POST', '/api/companies/:id/tasks', async ({ user, params, body }) => {
     const { company } = await requireCompany(params.id, user.id, 'tasks');
     const title = cleanText(body.title, 120);
-    if (title.length < 2) throw bad('Gorev basligi en az 2 karakter olmali.');
-    if (body.assigneeUserId && body.assigneeGroupId) throw bad('Gorev ya kisiye ya gruba atanir.');
-    if (body.assigneeUserId && !memberOf(company, body.assigneeUserId)) throw bad('Atanan kisi bu sirkette degil.');
-    if (body.assigneeGroupId && !company.groups.some((g) => g.id === body.assigneeGroupId)) throw bad('Grup bu sirkete ait degil.');
+    if (title.length < 2) throw bad('Task title must be at least 2 characters.');
+    if (body.assigneeUserId && body.assigneeGroupId) throw bad('A task is assigned to either a person or a group.');
+    if (body.assigneeUserId && !memberOf(company, body.assigneeUserId)) throw bad('The assignee is not in this company.');
+    if (body.assigneeGroupId && !company.groups.some((g) => g.id === body.assigneeGroupId)) throw bad('That group does not belong to this company.');
 
     const task = {
       id: id(), companyId: company.id, title,
@@ -1209,41 +1215,41 @@ export function createApi(store) {
 
   route('PATCH', '/api/tasks/:taskId', async ({ user, params, body }) => {
     const companyId = await store.get(`tidx/${params.taskId}`);
-    if (!companyId) throw missing('Gorev bulunamadi.');
+    if (!companyId) throw missing('Task not found.');
     const { company } = await requireCompany(companyId, user.id);
     const task = await store.get(`task/${companyId}/${params.taskId}`);
-    if (!task) throw missing('Gorev bulunamadi.');
+    if (!task) throw missing('Task not found.');
 
     const group = task.assigneeGroupId ? company.groups.find((g) => g.id === task.assigneeGroupId) : null;
     const isAssignee = task.assigneeUserId === user.id || (group && group.members.includes(user.id));
     const manages = can(company, user.id, 'tasks');
-    if (!manages && !isAssignee) throw denied('Bu gorevi degistiremezsin.');
+    if (!manages && !isAssignee) throw denied('You cannot change this task.');
 
     if (body.status !== undefined) {
-      if (!STATUSES.includes(body.status)) throw bad('Gecersiz durum.');
+      if (!STATUSES.includes(body.status)) throw bad('Invalid status.');
       task.status = body.status;
     }
     if (manages) {
       if (body.title !== undefined) {
         const title = cleanText(body.title, 120);
-        if (title.length < 2) throw bad('Gorev basligi en az 2 karakter olmali.');
+        if (title.length < 2) throw bad('Task title must be at least 2 characters.');
         task.title = title;
       }
       if (body.description !== undefined) task.description = longText(body.description, 2000);
       if (body.priority !== undefined) {
-        if (!PRIORITIES.includes(body.priority)) throw bad('Gecersiz oncelik.');
+        if (!PRIORITIES.includes(body.priority)) throw bad('Invalid priority.');
         task.priority = body.priority;
       }
       if (body.dueDate !== undefined) {
         task.dueDate = /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate || '') ? body.dueDate : null;
       }
       if (body.assigneeUserId !== undefined) {
-        if (body.assigneeUserId && !memberOf(company, body.assigneeUserId)) throw bad('Atanan kisi bu sirkette degil.');
+        if (body.assigneeUserId && !memberOf(company, body.assigneeUserId)) throw bad('The assignee is not in this company.');
         task.assigneeUserId = body.assigneeUserId || null;
         if (task.assigneeUserId) task.assigneeGroupId = null;
       }
       if (body.assigneeGroupId !== undefined) {
-        if (body.assigneeGroupId && !company.groups.some((g) => g.id === body.assigneeGroupId)) throw bad('Grup bu sirkete ait degil.');
+        if (body.assigneeGroupId && !company.groups.some((g) => g.id === body.assigneeGroupId)) throw bad('That group does not belong to this company.');
         task.assigneeGroupId = body.assigneeGroupId || null;
         if (task.assigneeGroupId) task.assigneeUserId = null;
       }
@@ -1257,7 +1263,7 @@ export function createApi(store) {
 
   route('DELETE', '/api/tasks/:taskId', async ({ user, params }) => {
     const companyId = await store.get(`tidx/${params.taskId}`);
-    if (!companyId) throw missing('Gorev bulunamadi.');
+    if (!companyId) throw missing('Task not found.');
     const { company } = await requireCompany(companyId, user.id, 'tasks');
     const removedTask = await store.get(`task/${companyId}/${params.taskId}`);
     await store.del(`task/${companyId}/${params.taskId}`);
@@ -1272,10 +1278,10 @@ export function createApi(store) {
   route('POST', '/api/companies/:id/meetings', async ({ user, params, body }) => {
     const { company } = await requireCompany(params.id, user.id, 'meetings');
     const title = cleanText(body.title, 120);
-    if (title.length < 2) throw bad('Toplanti basligi en az 2 karakter olmali.');
-    if (body.groupId && !company.groups.some((g) => g.id === body.groupId)) throw bad('Grup bu sirkete ait degil.');
+    if (title.length < 2) throw bad('Meeting title must be at least 2 characters.');
+    if (body.groupId && !company.groups.some((g) => g.id === body.groupId)) throw bad('That group does not belong to this company.');
     const startsAt = Number(body.startsAt);
-    if (!Number.isFinite(startsAt) || startsAt < now() - 86400000) throw bad('Gecerli bir baslangic zamani sec.');
+    if (!Number.isFinite(startsAt) || startsAt < now() - 86400000) throw bad('Pick a valid start time.');
 
     const meeting = {
       id: id(), companyId: company.id, title,
@@ -1315,24 +1321,24 @@ export function createApi(store) {
 
   route('PATCH', '/api/meetings/:meetingId', async ({ user, params, body }) => {
     const companyId = await store.get(`midx/${params.meetingId}`);
-    if (!companyId) throw missing('Toplanti bulunamadi.');
+    if (!companyId) throw missing('Meeting not found.');
     const { company } = await requireCompany(companyId, user.id, 'meetings');
     const meeting = await store.get(`meet/${companyId}/${params.meetingId}`);
-    if (!meeting) throw missing('Toplanti bulunamadi.');
+    if (!meeting) throw missing('Meeting not found.');
 
     if (body.title !== undefined) {
       const title = cleanText(body.title, 120);
-      if (title.length < 2) throw bad('Toplanti basligi en az 2 karakter olmali.');
+      if (title.length < 2) throw bad('Meeting title must be at least 2 characters.');
       meeting.title = title;
     }
     if (body.description !== undefined) meeting.description = longText(body.description, 1000);
     if (body.startsAt !== undefined) {
       const startsAt = Number(body.startsAt);
-      if (!Number.isFinite(startsAt)) throw bad('Gecerli bir baslangic zamani sec.');
+      if (!Number.isFinite(startsAt)) throw bad('Pick a valid start time.');
       meeting.startsAt = startsAt;
     }
     if (body.status !== undefined) {
-      if (!['scheduled', 'live', 'ended', 'cancelled'].includes(body.status)) throw bad('Gecersiz durum.');
+      if (!['scheduled', 'live', 'ended', 'cancelled'].includes(body.status)) throw bad('Invalid status.');
       meeting.status = body.status;
     }
     if (body.kind !== undefined) meeting.kind = body.kind === 'video' ? 'video' : 'audio';
@@ -1345,7 +1351,7 @@ export function createApi(store) {
 
   route('DELETE', '/api/meetings/:meetingId', async ({ user, params }) => {
     const companyId = await store.get(`midx/${params.meetingId}`);
-    if (!companyId) throw missing('Toplanti bulunamadi.');
+    if (!companyId) throw missing('Meeting not found.');
     const { company } = await requireCompany(companyId, user.id, 'meetings');
     const removedMeeting = await store.get(`meet/${companyId}/${params.meetingId}`);
     await store.del(`meet/${companyId}/${params.meetingId}`);
@@ -1370,17 +1376,17 @@ export function createApi(store) {
       };
     }
     if (body && body.meetingId) {
-      assertId(body.meetingId, 'toplanti kimligi');
+      assertId(body.meetingId, 'meeting id');
       const companyId = await store.get(`midx/${body.meetingId}`);
-      if (!companyId) throw missing('Toplanti bulunamadi.');
+      if (!companyId) throw missing('Meeting not found.');
       const { company } = await requireCompany(companyId, user.id);
       const meeting = await store.get(`meet/${companyId}/${body.meetingId}`);
-      if (!meeting) throw missing('Toplanti bulunamadi.');
+      if (!meeting) throw missing('Meeting not found.');
       const audience = meetingAudience(company, meeting);
-      if (!audience.includes(user.id)) throw denied('Bu toplantiya katilamazsin.');
+      if (!audience.includes(user.id)) throw denied('You cannot join this meeting.');
       return { roomId: `meet:${meeting.id}`, audience, title: meeting.title, meeting, company };
     }
-    throw bad('Gorusme hedefi belirtilmedi.');
+    throw bad('No call target was given.');
   }
 
   route('POST', '/api/calls/start', async ({ user, body }) => {
@@ -1456,10 +1462,10 @@ export function createApi(store) {
   route('POST', '/api/calls/signal', async ({ user, body }) => {
     await limit(`call:${user.id}`, LIMITS.call);
     const { roomId } = assertRoom(body.roomId);
-    const toUserId = assertId(body.toUserId, 'hedef');
+    const toUserId = assertId(body.toUserId, 'target');
     const room = await store.get(`room/${roomId}`);
-    if (!room) throw missing('Gorusme bulunamadi.');
-    if (!room.participants.some((p) => p.userId === user.id)) throw denied('Bu gorusmede degilsin.');
+    if (!room) throw missing('Call not found.');
+    if (!room.participants.some((p) => p.userId === user.id)) throw denied('You are not in this call.');
 
     await emit([toUserId], {
       type: 'call:signal', roomId, fromUserId: user.id, fromNick: user.nick,
@@ -1473,7 +1479,7 @@ export function createApi(store) {
     if (parsed.kind === 'conv') await requireConv(parsed.id, user.id);
     else {
       const companyId = await store.get(`midx/${parsed.id}`);
-      if (!companyId) throw missing('Toplanti bulunamadi.');
+      if (!companyId) throw missing('Meeting not found.');
       await requireCompany(companyId, user.id);
     }
     const room = await store.get(`room/${parsed.roomId}`);
@@ -1508,10 +1514,10 @@ export function createApi(store) {
     const query = Object.fromEntries(parsed.searchParams.entries());
 
     const found = match(method.toUpperCase(), pathParts);
-    if (!found) return { status: 404, body: { error: 'Bulunamadi.' } };
+    if (!found) return { status: 404, body: { error: 'Not found.' } };
 
     const ip = String(
-      headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || headers['x-real-ip'] || 'yerel'
+      headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || headers['x-real-ip'] || 'local'
     ).split(',')[0].trim().slice(0, 45);
 
     try {
@@ -1536,7 +1542,7 @@ export function createApi(store) {
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
       if (status >= 500) console.error('edge:', err);
-      return { status, body: { error: status >= 500 ? 'Sunucu hatasi.' : err.message } };
+      return { status, body: { error: status >= 500 ? 'Server error.' : err.message } };
     }
   };
 }

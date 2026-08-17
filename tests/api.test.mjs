@@ -161,6 +161,25 @@ const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
   if (Buffer.compare(Buffer.from(decrypted), Buffer.from(bytes)) !== 0) throw new Error('foto coz uyusmadi');
   ok('sifreli foto eki indirildi ve birebir cozuldu');
 
+  // her tur dosya eki (gorsel olmayan)
+  const doc = Buffer.from('gizli rapor icerigi'.repeat(20));
+  const filePayload = await encryptFor('rapor ektedir', dm.members, ada, doc);
+  const fileUpload = await call('POST', `/api/conversations/${dm.id}/blobs`, { data: filePayload.file.data }, ada.token);
+  await call('POST', `/api/conversations/${dm.id}/messages`, {
+    iv: filePayload.iv, ciphertext: filePayload.ciphertext, keys: filePayload.keys,
+    attachment: { blobId: fileUpload.blobId, iv: filePayload.file.iv, mime: 'application/pdf',
+                  kind: 'file', name: 'rapor.pdf', size: doc.length }
+  }, ada.token);
+  const fileBox = await call('GET', `/api/conversations/${dm.id}/messages`, null, kaan.token);
+  const fileMsg = fileBox.messages[fileBox.messages.length - 1];
+  if (fileMsg.attachment.kind !== 'file' || fileMsg.attachment.mime !== 'application/octet-stream') {
+    throw new Error('dosya eki turu yanlis: ' + JSON.stringify(fileMsg.attachment));
+  }
+  const fileBlob = await call('GET', `/api/conversations/${dm.id}/blobs/${fileUpload.blobId}`, null, kaan.token);
+  const fileBytes = await decryptFileAs(fileMsg, ada.publicKey, kaan, fileBlob.data);
+  if (Buffer.compare(Buffer.from(fileBytes), doc) !== 0) throw new Error('dosya cozulemedi');
+  ok('sifreli dosya eki (pdf) gonderildi ve birebir cozuldu');
+
   await call('POST', `/api/conversations/${dm.id}/read`, null, kaan.token);
   const convs = await call('GET', '/api/conversations', null, ada.token);
   const dmView = convs.conversations.find((c) => c.id === dm.id);

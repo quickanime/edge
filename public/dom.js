@@ -1,5 +1,7 @@
 /** Kucuk DOM yardimcilari — metin her zaman textContent ile basilir. */
 
+import { t, locale } from './i18n.js';
+
 export function h(tag, props = {}, children = []) {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -56,6 +58,8 @@ export const ICONS = {
   camOff: ['M3 7h8v10H3zM21 7v10l-6-4', 'M3 3l18 18'],
   screen: 'M3 5h18v11H3zM8 20h8M12 16v4M9 11l3-3 3 3',
   image: 'M4 5h16v14H4zM8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3M5 17l5-5 3 3 2-2 4 4',
+  clip: 'M21 11l-8.5 8.5a4.5 4.5 0 01-6.4-6.4L14 4.8a3 3 0 014.3 4.2l-8 8a1.5 1.5 0 01-2.2-2.1l7.4-7.4',
+  file: 'M7 3h7l5 5v13H7zM14 3v5h5',
   timer: 'M12 8v5l3 2M4 12a8 8 0 1016 0 8 8 0 10-16 0M9 2h6',
   link: 'M9 15l6-6M8 8H6a4 4 0 000 8h2M16 16h2a4 4 0 000-8h-2',
   calendar: 'M4 6h16v14H4zM8 3v4M16 3v4M4 11h16',
@@ -105,23 +109,23 @@ export function dayLabel(ts) {
   const today = new Date();
   const yesterday = new Date(today.getTime() - 86400000);
   const same = (a, b) => a.toDateString() === b.toDateString();
-  if (same(d, today)) return 'Bugun';
-  if (same(d, yesterday)) return 'Dun';
-  return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (same(d, today)) return t('today');
+  if (same(d, yesterday)) return t('yesterday');
+  return d.toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function relTime(ts) {
   if (!ts) return '';
   const diff = Date.now() - ts;
-  if (diff < 60000) return 'simdi';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} dk`;
+  if (diff < 60000) return t('now');
+  if (diff < 3600000) return t('minutes', { n: Math.floor(diff / 60000) });
   if (diff < 86400000) return timeShort(ts);
-  if (diff < 7 * 86400000) return new Date(ts).toLocaleDateString('tr-TR', { weekday: 'short' });
-  return new Date(ts).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+  if (diff < 7 * 86400000) return new Date(ts).toLocaleDateString(locale(), { weekday: 'short' });
+  return new Date(ts).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 }
 
 export function dateTimeLabel(ts) {
-  return new Date(ts).toLocaleString('tr-TR', {
+  return new Date(ts).toLocaleString(locale(), {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
   });
 }
@@ -132,9 +136,11 @@ export function toLocalInput(ts) {
 }
 
 export function durationLabel(seconds) {
-  if (!seconds) return 'kapali';
-  if (seconds < 60) return `${seconds} sn`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)} dk`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} saat`;
-  return `${Math.round(seconds / 86400)} gun`;
+  if (!seconds) return t('ttl_off');
+  if (seconds === 30) return t('ttl_30s');
+  if (seconds === 300) return t('ttl_5m');
+  if (seconds === 3600) return t('ttl_1h');
+  if (seconds === 86400) return t('ttl_1d');
+  if (seconds === 604800) return t('ttl_7d');
+  return t('minutes', { n: Math.round(seconds / 60) });
 }

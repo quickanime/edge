@@ -124,6 +124,15 @@ export async function decryptOne(conv, message) {
 }
 
 /** Sifreli foto ekini indirip cozer, tarayici icin gecici bir adres uretir. */
+/** Sifreli eki cozup ham baytlari dondurur (dosya indirme icin). */
+export async function attachmentBytes(conv, message) {
+  const attachment = message.attachment;
+  const publicKey = senderKeyFor(conv, message.senderId);
+  if (!attachment || !publicKey) return null;
+  const res = await api.get(`/api/conversations/${conv.id}/blobs/${attachment.blobId}`);
+  return E2E.decryptFile(message.raw, publicKey, res.data, attachment.iv);
+}
+
 export async function loadAttachment(conv, message) {
   if (state.images.has(message.id)) return state.images.get(message.id);
   const attachment = message.attachment;
@@ -166,7 +175,8 @@ export async function sendMessage(conv, text, image = null) {
     const upload = await api.post(`/api/conversations/${conv.id}/blobs`, { data: payload.file.data });
     body.attachment = {
       blobId: upload.blobId, iv: payload.file.iv, mime: image.mime,
-      name: image.name, size: image.size, width: image.width, height: image.height
+      name: image.name, size: image.size, width: image.width, height: image.height,
+      kind: image.kind || 'image'
     };
   }
 

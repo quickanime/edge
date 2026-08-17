@@ -1,6 +1,7 @@
 /** Paylasilan arayuz parcalari: bildirim, diyalog, form kaliplari. */
 
 import { h, icon, ICONS, clear } from './dom.js';
+import { t, serverText } from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -15,7 +16,7 @@ export function toast(message, isError = false) {
 }
 
 export async function guard(fn) {
-  try { return await fn(); } catch (err) { toast(err.message || 'Hata', true); return null; }
+  try { return await fn(); } catch (err) { toast(serverText(err.message) || t('error'), true); return null; }
 }
 
 export function openModal(title, buildBody, { wide = false } = {}) {
@@ -52,7 +53,7 @@ export function field(label, control, hint) {
 export function actions(closeFn, submitLabel, extra) {
   return h('div', { class: 'modal-actions' }, [
     extra || null,
-    h('button', { class: 'btn btn-ghost', type: 'button', onClick: closeFn, text: 'Vazgec' }),
+    h('button', { class: 'btn btn-ghost', type: 'button', onClick: closeFn, text: t('cancel') }),
     h('button', { class: 'btn btn-primary', type: 'submit', text: submitLabel })
   ]);
 }
@@ -61,13 +62,14 @@ export function confirmModal(title, text, onConfirm, { danger = true } = {}) {
   openModal(title, (close) => form(() => guard(async () => { await onConfirm(); close(); }), [
     h('p', { class: 'muted', text }),
     h('div', { class: 'modal-actions' }, [
-      h('button', { class: 'btn btn-ghost', type: 'button', onClick: close, text: 'Vazgec' }),
-      h('button', { class: `btn ${danger ? 'btn-danger-solid' : 'btn-primary'}`, type: 'submit', text: 'Onayla' })
+      h('button', { class: 'btn btn-ghost', type: 'button', onClick: close, text: t('cancel') }),
+      h('button', { class: `btn ${danger ? 'btn-danger-solid' : 'btn-primary'}`, type: 'submit', text: t('confirm') })
     ])
   ]));
 }
 
-export function copyText(text, label = 'Kopyalandi.') {
+export function copyText(text, label = null) {
+  label = label || t('copied');
   const done = () => toast(label);
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done, () => fallback());
@@ -77,7 +79,7 @@ export function copyText(text, label = 'Kopyalandi.') {
     const area = h('textarea', { value: text, class: 'copy-sink' });
     document.body.append(area);
     area.select();
-    try { document.execCommand('copy'); done(); } catch { toast('Kopyalanamadi.', true); }
+    try { document.execCommand('copy'); done(); } catch { toast(t('copy_failed'), true); }
     area.remove();
   }
 }

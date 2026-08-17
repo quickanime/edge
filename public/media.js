@@ -18,7 +18,7 @@ function loadImage(file) {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Gorsel okunamadi.')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read the image.')); };
     img.src = url;
   });
 }
@@ -70,16 +70,39 @@ export async function toChatImage(file) {
   if (blob && blob.size > 3_500_000) blob = await toBlob(drawScaled(img, 1200), 'image/jpeg', 0.75);
   const bytes = new Uint8Array(await blob.arrayBuffer());
   return {
-    bytes, mime: 'image/jpeg', name: file.name || 'foto.jpg',
-    size: bytes.byteLength, width: canvas.width, height: canvas.height
+    bytes, mime: 'image/jpeg', name: file.name || 'photo.jpg',
+    size: bytes.byteLength, width: canvas.width, height: canvas.height, kind: 'image'
   };
+}
+
+/** Herhangi bir dosya: kucultme yok, oldugu gibi sifrelenir. */
+export async function toAttachment(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.byteLength > 4_000_000) {
+    throw new Error('File is too large (4 MB max).');
+  }
+  return {
+    bytes,
+    mime: file.type || 'application/octet-stream',
+    name: file.name || 'file',
+    size: bytes.byteLength,
+    width: 0,
+    height: 0,
+    kind: 'file'
+  };
+}
+
+export function humanSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Dosya okunamadi.'));
+    reader.onerror = () => reject(new Error('Could not read the file.'));
     reader.readAsDataURL(blob);
   });
 }

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="tr" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Edge — uctan uca sifreli ekip mesajlasmasi, sesli ve goruntulu gorusme, gorev ve toplanti yonetimi.">
+  <meta name="description" content="Edge — end-to-end encrypted team messaging, voice and video calls, tasks and meetings.">
   <title>Edge</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
@@ -18,71 +18,71 @@
           <img src="/logo.svg" alt="" width="64" height="64">
         </div>
         <h1>Edge</h1>
-        <p class="hero-lead">Ekibin icin uctan uca sifreli mesajlasma, gorusme ve is takibi. Anahtarlar cihazinda kalir.</p>
+        <p class="hero-lead" data-i18n="hero_lead"></p>
         <ul class="hero-list">
-          <li><span class="hero-ico" data-ico="lock"></span><div><strong>Uctan uca sifreleme</strong><small>Mesajlar, fotolar ve gorusme sinyalleri cihazda sifrelenir.</small></div></li>
-          <li><span class="hero-ico" data-ico="video"></span><div><strong>Sesli, goruntulu, ekran paylasimi</strong><small>4K'ya kadar kalite, dogrudan cihazdan cihaza.</small></div></li>
-          <li><span class="hero-ico" data-ico="users"></span><div><strong>Sirket, grup ve davet linki</strong><small>Tek tek eklemek yok: linki paylas, ekip katilsin.</small></div></li>
-          <li><span class="hero-ico" data-ico="check"></span><div><strong>Gorev ve toplanti</strong><small>Kisiye ya da gruba gorev ata, toplanti planla.</small></div></li>
+          <li><span class="hero-ico" data-ico="lock"></span><div><strong data-i18n="hero_e2e"></strong><small data-i18n="hero_e2e_sub"></small></div></li>
+          <li><span class="hero-ico" data-ico="video"></span><div><strong data-i18n="hero_call"></strong><small data-i18n="hero_call_sub"></small></div></li>
+          <li><span class="hero-ico" data-ico="users"></span><div><strong data-i18n="hero_org"></strong><small data-i18n="hero_org_sub"></small></div></li>
+          <li><span class="hero-ico" data-ico="check"></span><div><strong data-i18n="hero_work"></strong><small data-i18n="hero_work_sub"></small></div></li>
         </ul>
       </section>
 
       <section class="gate-card">
         <header class="gate-head">
           <img src="/logo.svg" alt="" class="gate-logo" width="44" height="44">
-          <h2>Hos geldin</h2>
-          <p class="muted">Nickinle giris yap ya da yeni hesap olustur.</p>
+          <h2 data-i18n="welcome"></h2>
+          <p class="muted" data-i18n="welcome_sub"></p>
         </header>
 
         <div id="gate-invite" class="gate-invite is-hidden"></div>
 
         <div id="gate-tabs" class="tabs" role="tablist">
-          <button class="tab is-active" data-gate-tab="login" role="tab" type="button">Giris</button>
-          <button class="tab" data-gate-tab="register" role="tab" type="button">Kayit</button>
+          <button class="tab is-active" data-gate-tab="login" role="tab" type="button" data-i18n="tab_login"></button>
+          <button class="tab" data-gate-tab="register" role="tab" type="button" data-i18n="tab_register"></button>
         </div>
 
         <form id="login-form" class="form">
           <label class="field">
-            <span>Nick</span>
-            <input name="nick" autocomplete="username" placeholder="nickin" required>
+            <span data-i18n="nick"></span>
+            <input name="nick" autocomplete="username" data-i18n-ph="nick" required>
           </label>
           <label class="field">
-            <span>Parola</span>
+            <span data-i18n="password"></span>
             <input name="password" type="password" autocomplete="current-password" required>
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Giris yap</button>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="sign_in"></button>
         </form>
 
         <form id="register-form" class="form is-hidden">
           <label class="field">
-            <span>Nick</span>
-            <input name="nick" autocomplete="username" placeholder="3-24 karakter" required>
-            <small class="muted">Harf, rakam, nokta, alt cizgi ve tire.</small>
+            <span data-i18n="nick"></span>
+            <input name="nick" autocomplete="username" data-i18n-ph="nick" required>
+            <small class="muted" data-i18n="nick_hint"></small>
           </label>
           <label class="field">
-            <span>Gorunen ad</span>
-            <input name="displayName" placeholder="istege bagli">
+            <span data-i18n="display_name"></span>
+            <input name="displayName" data-i18n-ph="optional">
           </label>
           <label class="field">
-            <span>Parola</span>
+            <span data-i18n="password"></span>
             <input name="password" type="password" autocomplete="new-password" minlength="8" required>
-            <small class="muted">En az 8 karakter. Parola sunucuya gonderilmez; gizli anahtarini o acar.</small>
+            <small class="muted" data-i18n="password_hint"></small>
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Hesap olustur</button>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="create_account"></button>
         </form>
 
         <form id="unlock-form" class="form is-hidden">
-          <p class="muted">Oturum acik, anahtarlarin kilitli. Parolanla ac.</p>
+          <p class="muted" data-i18n="locked_note"></p>
           <label class="field">
-            <span>Parola</span>
+            <span data-i18n="password"></span>
             <input name="password" type="password" autocomplete="current-password" required>
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Kilidi ac</button>
-          <button class="btn btn-ghost btn-block" type="button" data-action="sign-out">Cikis yap</button>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="unlock"></button>
+          <button class="btn btn-ghost btn-block" type="button" data-action="sign-out" data-i18n="sign_out"></button>
         </form>
 
         <p id="gate-error" class="error" role="alert"></p>
-        <p class="gate-foot muted">Sunucu yalnizca sifreli veriyi saklar. Parolani kaybedersen gecmis mesajlar acilamaz.</p>
+        <p class="gate-foot muted" data-i18n="gate_foot"></p>
       </section>
     </div>
   </main>
@@ -91,37 +91,37 @@
   <div id="app" class="app is-hidden">
     <nav class="rail">
       <img src="/logo.svg" alt="Edge" class="rail-logo" width="28" height="28">
-      <button class="rail-btn is-active" data-nav="dm" title="Mesajlar" aria-label="Mesajlar">
+      <button class="rail-btn is-active" data-nav="dm" data-i18n-title="nav_messages">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg>
       </button>
-      <button class="rail-btn" data-nav="friends" title="Arkadaslar" aria-label="Arkadaslar">
+      <button class="rail-btn" data-nav="friends" data-i18n-title="nav_friends">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M8.5 6.5a2.5 2.5 0 105 0 2.5 2.5 0 10-5 0M18 8v6M15 11h6"/></svg>
       </button>
-      <button class="rail-btn" data-nav="tasks" title="Gorevlerim" aria-label="Gorevlerim">
+      <button class="rail-btn" data-nav="tasks" data-i18n-title="nav_tasks">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M4 12h11M4 17h7M18 6l2 2 3-3"/></svg>
       </button>
-      <button class="rail-btn" data-nav="meetings" title="Toplantilar" aria-label="Toplantilar">
+      <button class="rail-btn" data-nav="meetings" data-i18n-title="nav_meetings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4zM8 3v4M16 3v4M4 11h16"/></svg>
       </button>
       <div class="rail-sep"></div>
       <div id="rail-companies" class="rail-companies"></div>
-      <button class="rail-btn rail-add" data-action="new-company" title="Sirket olustur" aria-label="Sirket olustur">
+      <button class="rail-btn rail-add" data-action="new-company" data-i18n-title="nav_new_company">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button class="rail-btn rail-profile" data-action="profile" title="Profil" aria-label="Profil">
+      <button class="rail-btn rail-profile" data-action="profile" data-i18n-title="nav_profile">
         <span id="rail-me"></span>
       </button>
     </nav>
 
     <aside class="side">
       <header class="side-head">
-        <h2 id="side-title">Mesajlar</h2>
-        <button class="icon-btn" data-action="new-dm" title="Yeni sohbet" aria-label="Yeni sohbet">
+        <h2 id="side-title" data-i18n="nav_messages"></h2>
+        <button class="icon-btn" data-action="new-dm" data-i18n-title="new_chat">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
       </header>
       <div class="side-search">
-        <input id="side-filter" type="search" placeholder="Ara" autocomplete="off">
+        <input id="side-filter" type="search" data-i18n-ph="search" autocomplete="off">
       </div>
       <div id="side-list" class="side-list"></div>
     </aside>
@@ -136,7 +136,7 @@
     <div class="modal-card">
       <header class="modal-head">
         <h3 id="modal-title"></h3>
-        <button class="icon-btn" data-action="close-modal" aria-label="Kapat" type="button">
+        <button class="icon-btn" data-action="close-modal" data-i18n-title="close" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>

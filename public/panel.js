@@ -4,6 +4,7 @@ import { h, icon, ICONS, avatarNode, relTime, dateTimeLabel, toLocalInput } from
 import {
   toast, guard, openModal, form, field, actions, confirmModal, copyText, emptyState, iconBtn, sectionHead
 } from './ui.js';
+import { t } from './i18n.js';
 import * as store from './store.js';
 import { state } from './store.js';
 import { api } from './net.js';
@@ -11,38 +12,31 @@ import { taskBoard } from './tasks.js';
 import * as call from './call.js';
 import { pickFile, toAvatarDataUrl } from './media.js';
 
-const PERM_LABELS = {
-  members: ['Uye yonetimi', 'Uye ekleyip cikarabilir'],
-  groups: ['Gruplar', 'Grup acabilir, duzenleyebilir, silebilir'],
-  tasks: ['Gorevler', 'Gorev olusturup atayabilir'],
-  meetings: ['Toplantilar', 'Toplanti planlayip iptal edebilir'],
-  invites: ['Davet linkleri', 'Davet linki uretebilir ve kapatabilir']
-};
+const PERM_KEYS = ['members', 'groups', 'tasks', 'meetings', 'invites'];
+const roleLabel = (role) => t(`role_${role}`);
 
-const ROLE_LABEL = { owner: 'Sirket sahibi', admin: 'Yonetici', member: 'Uye' };
-
-const ACTIONS = {
-  'company:create': 'sirketi olusturdu',
-  'company:rename': 'sirket adini degistirdi',
-  'company:logo': 'sirket logosunu guncelledi',
-  'member:add': 'uye ekledi',
-  'member:join': 'davet linkiyle katildi',
-  'member:remove': 'uyeyi cikardi',
-  'member:leave': 'sirketten ayrildi',
-  'member:access': 'yetkileri degistirdi',
-  'group:create': 'grup olusturdu',
-  'group:update': 'grubu duzenledi',
-  'group:delete': 'grubu sildi',
-  'group:member:add': 'gruba uye ekledi',
-  'group:member:remove': 'gruptan uye cikardi',
-  'invite:create': 'davet linki olusturdu',
-  'invite:delete': 'davet linkini kapatti',
-  'task:create': 'gorev olusturdu',
-  'task:update': 'gorevi guncelledi',
-  'task:delete': 'gorevi sildi',
-  'meeting:create': 'toplanti planladi',
-  'meeting:cancel': 'toplantiyi iptal etti',
-  'call:start': 'gorusme baslatti'
+const ACTION_KEYS = {
+  'company:create': 'act_company_create',
+  'company:rename': 'act_company_rename',
+  'company:logo': 'act_company_logo',
+  'member:add': 'act_member_add',
+  'member:join': 'act_member_join',
+  'member:remove': 'act_member_remove',
+  'member:leave': 'act_member_leave',
+  'member:access': 'act_member_access',
+  'group:create': 'act_group_create',
+  'group:update': 'act_group_update',
+  'group:delete': 'act_group_delete',
+  'group:member:add': 'act_group_member_add',
+  'group:member:remove': 'act_group_member_remove',
+  'invite:create': 'act_invite_create',
+  'invite:delete': 'act_invite_delete',
+  'task:create': 'act_task_create',
+  'task:update': 'act_task_update',
+  'task:delete': 'act_task_delete',
+  'meeting:create': 'act_meeting_create',
+  'meeting:cancel': 'act_meeting_cancel',
+  'call:start': 'act_call_start'
 };
 
 const allowed = (detail, perm) =>
@@ -54,12 +48,12 @@ export function companyPane(detail) {
   const upcoming = meetings.filter((m) => m.status !== 'cancelled').length;
 
   const tabs = [
-    ['groups', `Gruplar ${groups.length}`],
-    ['members', `Uyeler ${members.length}`],
-    ['tasks', `Gorevler ${tasks.filter((t) => t.status !== 'done').length}`],
-    ['meetings', `Toplantilar ${upcoming}`],
-    ['invites', `Davetler ${(detail.invites || []).length}`],
-    ['activity', 'Aktivite']
+    ['groups', `${t('tab_groups')} ${groups.length}`],
+    ['members', `${t('tab_members')} ${members.length}`],
+    ['tasks', `${t('tab_tasks')} ${tasks.filter((task) => task.status !== 'done').length}`],
+    ['meetings', `${t('tab_meetings')} ${upcoming}`],
+    ['invites', `${t('tab_invites')} ${(detail.invites || []).length}`],
+    ['activity', t('tab_activity')]
   ];
 
   const body = h('div', { class: 'pane-body' }, [h('div', { class: 'sheet' }, [
@@ -73,16 +67,16 @@ export function companyPane(detail) {
 
   return h('div', { class: 'pane' }, [
     h('header', { class: 'pane-head' }, [
-      iconBtn(ICONS.back, 'Liste', () => document.getElementById('app').classList.add('show-list'), 'only-narrow'),
+      iconBtn(ICONS.back, t('list'), () => document.getElementById('app').classList.add('show-list'), 'only-narrow'),
       h('button', {
-        class: 'logo-btn', title: isOwner || allowed(detail, 'members') ? 'Logoyu degistir' : company.name,
+        class: 'logo-btn', title: isOwner || allowed(detail, 'members') ? t('change_logo') : company.name,
         onClick: () => (isOwner || allowed(detail, 'members')) ? changeLogo(detail) : null
       }, [avatarNode(company.name, company.logo, { size: 'avatar-lg', accent: true })]),
       h('div', { class: 'grow' }, [
         h('h3', { text: company.name }),
-        h('p', { class: 'muted', text: `${ROLE_LABEL[company.role]} · ${members.length} uye · /${company.slug}` })
+        h('p', { class: 'muted', text: `${roleLabel(company.role)} · ${t('members_n', { n: members.length })} · /${company.slug}` })
       ]),
-      isOwner ? iconBtn(ICONS.sliders, 'Sirket ayarlari', () => companySettings(detail)) : null
+      isOwner ? iconBtn(ICONS.sliders, t('company_settings'), () => companySettings(detail)) : null
     ]),
     body
   ]);
@@ -106,12 +100,12 @@ function sectionFor(detail) {
 function groupsSection(detail) {
   const canManage = allowed(detail, 'groups');
   return h('section', { class: 'sheet-section' }, [
-    sectionHead('Gruplar', canManage ? h('button', {
+    sectionHead(t('groups'), canManage ? h('button', {
       class: 'btn btn-sm btn-primary', onClick: () => groupModal(detail)
-    }, [icon(ICONS.plus, 15), 'Grup olustur']) : null),
+    }, [icon(ICONS.plus, 15), t('create_group')]) : null),
     detail.groups.length
       ? h('div', { class: 'cards' }, detail.groups.map((group) => groupCard(group, detail, canManage)))
-      : emptyState('Grup yok', 'Ekipleri gruplara bol; her grup kendi sifreli kanalini ve davet linkini alir.')
+      : emptyState(t('groups_empty'), t('groups_empty_sub'))
   ]);
 }
 
@@ -123,39 +117,39 @@ function groupCard(group, detail, canManage) {
       avatarNode(group.name, null, {}),
       h('div', { class: 'grow' }, [
         h('div', { class: 'card-title', text: group.name }),
-        h('div', { class: 'muted', text: `${group.memberIds.length} uye` })
+        h('div', { class: 'muted', text: t('members_n', { n: group.memberIds.length }) })
       ]),
-      group.isMember ? h('span', { class: 'pill pill-accent', text: 'uyesin' }) : null
+      group.isMember ? h('span', { class: 'pill pill-accent', text: t('member_of') }) : null
     ]),
     group.description ? h('p', { class: 'card-desc', text: group.description }) : null,
     h('div', { class: 'link-row' }, [
       h('code', { text: `/${group.slug}` }),
-      iconBtn(ICONS.copy, 'Davet linkini kopyala', () => copyText(link, 'Grup davet linki kopyalandi.'))
+      iconBtn(ICONS.copy, t('copy'), () => copyText(link, t('link_copied')))
     ]),
     h('div', { class: 'card-actions' }, [
       group.isMember && conv ? h('button', {
         class: 'btn btn-sm', onClick: () => store.openConversation(conv)
-      }, [icon(ICONS.chat, 15), 'Sohbet']) : null,
+      }, [icon(ICONS.chat, 15), t('chat')]) : null,
       group.isMember && conv ? h('button', {
         class: 'btn btn-sm', onClick: () => guard(async () => {
           call.setMe(state.user);
           await call.startCall({
             target: { conversationId: conv.id }, kind: 'audio',
-            title: `${group.name} · grup gorusmesi`, multi: true
+            title: t('group_call', { name: group.name }), multi: true
           });
         })
-      }, [icon(ICONS.phone, 15), 'Ara']) : null,
-      canManage ? h('button', { class: 'btn btn-sm', text: 'Uyeler', onClick: () => groupMembersModal(group, detail) }) : null,
-      canManage ? h('button', { class: 'btn btn-sm', text: 'Duzenle', onClick: () => groupModal(detail, group) }) : null,
+      }, [icon(ICONS.phone, 15), t('call')]) : null,
+      canManage ? h('button', { class: 'btn btn-sm', text: t('members'), onClick: () => groupMembersModal(group, detail) }) : null,
+      canManage ? h('button', { class: 'btn btn-sm', text: t('edit'), onClick: () => groupModal(detail, group) }) : null,
       canManage ? h('button', {
-        class: 'btn btn-sm btn-danger', text: 'Sil',
-        onClick: () => confirmModal(`"${group.name}" silinsin mi?`, 'Grup, sohbeti ve davet linki kalici olarak silinir.', async () => {
+        class: 'btn btn-sm btn-danger', text: t('delete'),
+        onClick: () => confirmModal(t('delete_group_q', { name: group.name }), t('delete_group_note'), async () => {
           await api.del(`/api/groups/${group.id}`);
           state.activeConv.delete(store.navKey());
           await store.refreshAll();
           await store.loadCompany(detail.company.id);
           store.notify();
-          toast('Grup silindi.');
+          toast(t('group_deleted'));
         })
       }) : null
     ])
@@ -164,10 +158,10 @@ function groupCard(group, detail, canManage) {
 
 export function groupModal(detail, group) {
   const editing = Boolean(group);
-  openModal(editing ? 'Grubu duzenle' : 'Grup olustur', (close) => {
-    const name = h('input', { value: group ? group.name : '', placeholder: 'orn. Tasarim', required: true, maxlength: 60 });
-    const desc = h('input', { value: group ? group.description : '', placeholder: 'kisa aciklama', maxlength: 200 });
-    const slug = h('input', { placeholder: 'otomatik uretilir', maxlength: 32 });
+  openModal(t(editing ? 'edit' : 'create_group'), (close) => {
+    const name = h('input', { value: group ? group.name : '', placeholder: t('group_name_ph'), required: true, maxlength: 60 });
+    const desc = h('input', { value: group ? group.description : '', placeholder: t('description_ph'), maxlength: 200 });
+    const slug = h('input', { placeholder: '', maxlength: 32 });
     const picks = new Set(group ? group.memberIds : [state.user.id]);
 
     const list = editing ? null : h('div', { class: 'check-list' }, detail.members.map((m) => h('label', { class: 'check-row' }, [
@@ -176,7 +170,7 @@ export function groupModal(detail, group) {
         onChange: (e) => e.target.checked ? picks.add(m.id) : picks.delete(m.id)
       }),
       avatarNode(m.nick, m.avatar, { size: 'avatar-sm' }),
-      h('div', { class: 'grow' }, [h('strong', { text: m.nick }), h('div', { class: 'row-sub', text: ROLE_LABEL[m.role] })])
+      h('div', { class: 'grow' }, [h('strong', { text: m.nick }), h('div', { class: 'row-sub', text: roleLabel(m.role) })])
     ])));
 
     return form(() => guard(async () => {
@@ -189,24 +183,24 @@ export function groupModal(detail, group) {
       await store.refreshAll();
       await store.loadCompany(detail.company.id);
       store.notify();
-      toast(editing ? 'Grup guncellendi.' : 'Grup olusturuldu; davet linki hazir.');
+      toast(t(editing ? 'group_updated' : 'group_created'));
     }), [
-      field('Grup adi', name),
-      field('Aciklama', desc),
-      editing ? null : field('Davet linki kimligi', slug, `${location.host}/... — bos birakirsan otomatik atanir`),
-      list ? field('Uyeler', list) : null,
-      actions(close, editing ? 'Kaydet' : 'Olustur')
+      field(t('group_name'), name),
+      field(t('description'), desc),
+      editing ? null : field(t('invite_slug'), slug, t('invite_slug_hint', { host: location.host })),
+      list ? field(t('group_members'), list) : null,
+      actions(close, t(editing ? 'save' : 'create'))
     ]);
   });
 }
 
 function groupMembersModal(group, detail) {
-  openModal(`${group.name} uyeleri`, (close) => {
+  openModal(`${group.name} · ${t('members')}`, (close) => {
     const inside = detail.members.filter((m) => group.memberIds.includes(m.id));
     const outside = detail.members.filter((m) => !group.memberIds.includes(m.id));
     const select = h('select', {}, [
-      h('option', { value: '', text: outside.length ? 'Uye sec' : 'Eklenecek uye yok' }),
-      ...outside.map((m) => h('option', { value: m.id, text: `${m.nick} — ${ROLE_LABEL[m.role]}` }))
+      h('option', { value: '', text: t(outside.length ? 'pick_member' : 'no_member_to_add') }),
+      ...outside.map((m) => h('option', { value: m.id, text: `${m.nick} — ${roleLabel(m.role)}` }))
     ]);
 
     const reopen = async () => {
@@ -223,27 +217,27 @@ function groupMembersModal(group, detail) {
         avatarNode(m.nick, m.avatar, { size: 'avatar-sm' }),
         h('div', { class: 'grow' }, [h('strong', { text: m.nick }), h('div', { class: 'row-sub', text: m.displayName })]),
         h('button', {
-          class: 'btn btn-sm btn-danger', text: 'Cikar',
+          class: 'btn btn-sm btn-danger', text: t('remove_member'),
           onClick: () => guard(async () => {
             await api.del(`/api/groups/${group.id}/members/${m.id}`);
             await reopen();
-            toast('Uye gruptan cikarildi.');
+            toast(t('member_removed_group'));
           })
         })
       ]))),
-      field('Uye ekle', h('div', { class: 'inline-row' }, [
+      field(t('add_member'), h('div', { class: 'inline-row' }, [
         select,
         h('button', {
-          class: 'btn btn-sm btn-primary', text: 'Ekle',
+          class: 'btn btn-sm btn-primary', text: t('add'),
           onClick: () => guard(async () => {
             if (!select.value) return;
             await api.post(`/api/groups/${group.id}/members`, { userId: select.value });
             await reopen();
-            toast('Uye gruba eklendi.');
+            toast(t('member_added_group'));
           })
         })
       ])),
-      h('div', { class: 'modal-actions' }, [h('button', { class: 'btn btn-ghost', text: 'Kapat', onClick: close })])
+      h('div', { class: 'modal-actions' }, [h('button', { class: 'btn btn-ghost', text: t('close'), onClick: close })])
     ];
   });
 }
@@ -257,42 +251,42 @@ function membersSection(detail) {
   const canManage = allowed(detail, 'members');
 
   return h('section', { class: 'sheet-section' }, [
-    sectionHead('Uyeler',
+    sectionHead(t('members'),
       canManage ? h('button', {
         class: 'btn btn-sm', onClick: () => memberModal(detail)
-      }, [icon(ICONS.plus, 15), 'Nickle ekle']) : null,
+      }, [icon(ICONS.plus, 15), t('add_by_nick')]) : null,
       allowed(detail, 'invites') ? h('button', {
         class: 'btn btn-sm btn-primary', onClick: () => inviteModal(detail)
-      }, [icon(ICONS.link, 15), 'Davet linki']) : null),
+      }, [icon(ICONS.link, 15), t('create_link')]) : null),
 
     h('div', { class: 'list' }, detail.members.map((m) => h('div', { class: 'list-item' }, [
       avatarNode(m.nick, m.avatar, { online: m.online }),
       h('div', { class: 'grow' }, [
         h('strong', { text: m.nick }),
-        h('div', { class: 'row-sub', text: `${m.displayName} · ${m.online ? 'cevrimici' : `son ${relTime(m.lastSeenAt) || 'bilinmiyor'}`}` })
+        h('div', { class: 'row-sub', text: `${m.displayName} · ${m.online ? t('online') : t('last_seen', { when: relTime(m.lastSeenAt) || t('unknown') })}` })
       ]),
       h('span', {
         class: `pill${m.role === 'owner' ? ' pill-accent' : m.role === 'admin' ? ' pill-ok' : ''}`,
-        text: ROLE_LABEL[m.role]
+        text: roleLabel(m.role)
       }),
       m.role === 'admin' ? h('span', {
         class: 'pill pill-dim',
-        text: `${Object.values(m.perms || {}).filter(Boolean).length}/5 yetki`
+        text: t('perms_n', { n: Object.values(m.perms || {}).filter(Boolean).length })
       }) : null,
       m.id !== state.user.id ? h('button', {
-        class: 'btn btn-sm', text: 'Mesaj', onClick: () => guard(() => store.startDm(m.id))
+        class: 'btn btn-sm', text: t('message'), onClick: () => guard(() => store.startDm(m.id))
       }) : null,
       isOwner && m.role !== 'owner' ? h('button', {
-        class: 'btn btn-sm', text: 'Erisim', onClick: () => accessModal(detail, m)
+        class: 'btn btn-sm', text: t('access'), onClick: () => accessModal(detail, m)
       }) : null,
       canManage && m.role !== 'owner' && m.id !== state.user.id ? h('button', {
-        class: 'btn btn-sm btn-danger', text: 'Cikar',
-        onClick: () => confirmModal(`${m.nick} cikarilsin mi?`, 'Tum gruplardan da cikarilir.', async () => {
+        class: 'btn btn-sm btn-danger', text: t('remove_member'),
+        onClick: () => confirmModal(t('remove_member_q', { nick: m.nick }), t('remove_member_note'), async () => {
           await api.del(`/api/companies/${detail.company.id}/members/${m.id}`);
           await store.refreshAll();
           await store.loadCompany(detail.company.id);
           store.notify();
-          toast('Uye cikarildi.');
+          toast(t('member_removed'));
         })
       }) : null
     ])))
@@ -301,25 +295,25 @@ function membersSection(detail) {
 
 /** Yonetim paneline erisim ve tek tek yetkiler. */
 function accessModal(detail, member) {
-  openModal(`${member.nick} · erisim ayarlari`, (close) => {
+  openModal(t('access_title', { nick: member.nick }), (close) => {
     const perms = { ...(member.perms || {}) };
     let role = member.role;
 
-    const permList = h('div', { class: 'perm-list' }, Object.entries(PERM_LABELS).map(([key, [label, hint]]) =>
+    const permList = h('div', { class: 'perm-list' }, PERM_KEYS.map((key) =>
       h('label', { class: 'perm-row' }, [
         h('input', {
           type: 'checkbox', checked: Boolean(perms[key]),
           onChange: (e) => { perms[key] = e.target.checked; }
         }),
         h('div', { class: 'grow' }, [
-          h('strong', { text: label }),
-          h('div', { class: 'row-sub', text: hint })
+          h('strong', { text: t(`perm_${key}`) }),
+          h('div', { class: 'row-sub', text: t(`perm_${key}_sub`) })
         ])
       ])));
 
     const roleBox = h('div', { class: 'radio-cards' }, [
-      ['member', 'Uye', 'Yonetim paneli kapali; yalnizca sohbet ve kendi gorevleri.'],
-      ['admin', 'Yonetici', 'Yonetim paneline erisir; asagidaki yetkilerle sinirlanir.']
+      ['member', t('role_member'), t('role_member_sub')],
+      ['admin', t('role_admin'), t('role_admin_sub')]
     ].map(([value, label, hint]) => {
       const input = h('input', {
         type: 'radio', name: 'role', value, checked: role === value,
@@ -338,32 +332,32 @@ function accessModal(detail, member) {
       close();
       await store.loadCompany(detail.company.id);
       store.notify();
-      toast('Erisim ayarlari kaydedildi.');
+      toast(t('access_saved'));
     }), [
-      field('Rol', roleBox),
-      field('Yetkiler', permList),
-      actions(close, 'Kaydet')
+      field(t('role'), roleBox),
+      field(t('perms'), permList),
+      actions(close, t('save'))
     ]);
   });
 }
 
 function memberModal(detail) {
-  openModal('Uye ekle', (close) => {
-    const nick = h('input', { placeholder: 'nick', required: true, maxlength: 24 });
+  openModal(t('add_member'), (close) => {
+    const nick = h('input', { placeholder: t('nick').toLowerCase(), required: true, maxlength: 24 });
     const role = h('select', {}, [
-      h('option', { value: 'member', text: 'Uye' }),
-      h('option', { value: 'admin', text: 'Yonetici' })
+      h('option', { value: 'member', text: t('role_member') }),
+      h('option', { value: 'admin', text: t('role_admin') })
     ]);
     return form(() => guard(async () => {
       await api.post(`/api/companies/${detail.company.id}/members`, { nick: nick.value.trim(), role: role.value });
       close();
       await store.loadCompany(detail.company.id);
       store.notify();
-      toast('Uye eklendi.');
+      toast(t('member_added'));
     }), [
-      field('Kullanici nicki', nick),
-      field('Rol', role, 'Yonetici yetkilerini sonra "Erisim" ile sinirlayabilirsin.'),
-      actions(close, 'Ekle')
+      field(t('member_nick'), nick),
+      field(t('role'), role, t('role_hint')),
+      actions(close, t('add'))
     ]);
   });
 }
@@ -377,10 +371,10 @@ function invitesSection(detail) {
   const invites = detail.invites || [];
 
   return h('section', { class: 'sheet-section' }, [
-    sectionHead('Davet linkleri', canManage ? h('button', {
+    sectionHead(t('invites'), canManage ? h('button', {
       class: 'btn btn-sm btn-primary', onClick: () => inviteModal(detail)
-    }, [icon(ICONS.plus, 15), 'Link olustur']) : null),
-    h('p', { class: 'muted', text: `Link ile gelen kisi tek tek eklenmeye gerek kalmadan katilir. Ornek: ${location.host}/${detail.company.slug}` }),
+    }, [icon(ICONS.plus, 15), t('create_link')]) : null),
+    h('p', { class: 'muted', text: t('invites_note', { host: location.host, slug: detail.company.slug }) }),
     invites.length ? h('div', { class: 'list' }, invites.map((invite) => {
       const group = detail.groups.find((g) => g.id === invite.groupId);
       const link = `${location.origin}/${invite.slug}`;
@@ -389,38 +383,38 @@ function invitesSection(detail) {
         h('div', { class: 'grow' }, [
           h('strong', { text: `/${invite.slug}` }),
           h('div', { class: 'row-sub', text: [
-            group ? `grup: ${group.name}` : 'tum sirket',
-            `rol: ${ROLE_LABEL[invite.role]}`,
-            `kullanim: ${invite.uses}${invite.maxUses ? `/${invite.maxUses}` : ''}`
+            group ? t('group_prefix', { name: group.name }) : t('whole_company'),
+            roleLabel(invite.role),
+            invite.maxUses ? t('uses_limited', { used: invite.uses, max: invite.maxUses }) : t('uses', { used: invite.uses })
           ].join(' · ') })
         ]),
-        h('button', { class: 'btn btn-sm', text: 'Kopyala', onClick: () => copyText(link, 'Link kopyalandi.') }),
+        h('button', { class: 'btn btn-sm', text: t('copy'), onClick: () => copyText(link, t('link_copied')) }),
         canManage && !group ? h('button', {
-          class: 'btn btn-sm btn-danger', text: 'Kapat',
-          onClick: () => confirmModal('Link kapatilsin mi?', `/${invite.slug} artik calismaz.`, async () => {
+          class: 'btn btn-sm btn-danger', text: t('revoke'),
+          onClick: () => confirmModal(t('revoke_q'), t('revoke_note', { slug: invite.slug }), async () => {
             await api.del(`/api/invites/${invite.slug}`);
             await store.loadCompany(detail.company.id);
             store.notify();
-            toast('Davet linki kapatildi.');
+            toast(t('invite_revoked'));
           })
         }) : null
       ]);
-    })) : emptyState('Link yok', 'Davet linki olusturarak ekibi tek tek eklemeden cagirabilirsin.')
+    })) : emptyState(t('invites_empty'), t('invites_empty_sub'))
   ]);
 }
 
 function inviteModal(detail) {
-  openModal('Davet linki olustur', (close) => {
-    const slug = h('input', { placeholder: 'vertex veya 12345', maxlength: 32 });
+  openModal(t('create_link'), (close) => {
+    const slug = h('input', { placeholder: 'vertex', maxlength: 32 });
     const group = h('select', {}, [
-      h('option', { value: '', text: 'Tum sirket' }),
-      ...detail.groups.map((g) => h('option', { value: g.id, text: `Grup — ${g.name}` }))
+      h('option', { value: '', text: t('whole_company') }),
+      ...detail.groups.map((g) => h('option', { value: g.id, text: t('group_prefix', { name: g.name }) }))
     ]);
     const role = h('select', {}, [
-      h('option', { value: 'member', text: 'Uye' }),
-      h('option', { value: 'admin', text: 'Yonetici' })
+      h('option', { value: 'member', text: t('role_member') }),
+      h('option', { value: 'admin', text: t('role_admin') })
     ]);
-    const maxUses = h('input', { type: 'number', min: '0', placeholder: '0 = sinirsiz' });
+    const maxUses = h('input', { type: 'number', min: '0', placeholder: t('max_uses_ph') });
 
     return form(() => guard(async () => {
       const res = await api.post(`/api/companies/${detail.company.id}/invites`, {
@@ -433,12 +427,12 @@ function inviteModal(detail) {
       await store.loadCompany(detail.company.id);
       state.companyTab = 'invites';
       store.notify();
-      copyText(`${location.origin}/${res.invite.slug}`, `Link hazir ve kopyalandi: /${res.invite.slug}`);
+      copyText(`${location.origin}/${res.invite.slug}`, t('invite_ready', { slug: res.invite.slug }));
     }), [
-      field('Link kimligi', slug, `${location.host}/... — bos birakirsan otomatik atanir`),
-      h('div', { class: 'grid-2' }, [field('Hedef', group), field('Rol', role)]),
-      field('Kullanim siniri', maxUses),
-      actions(close, 'Olustur')
+      field(t('invite_slug'), slug, t('invite_slug_hint', { host: location.host })),
+      h('div', { class: 'grid-2' }, [field(t('invite_target'), group), field(t('role'), role)]),
+      field(t('max_uses'), maxUses),
+      actions(close, t('create'))
     ]);
   });
 }
@@ -452,12 +446,12 @@ function meetingsSection(detail) {
   const list = detail.meetings.filter((m) => m.status !== 'cancelled');
 
   return h('section', { class: 'sheet-section' }, [
-    sectionHead('Toplantilar', canManage ? h('button', {
+    sectionHead(t('tab_meetings'), canManage ? h('button', {
       class: 'btn btn-sm btn-primary', onClick: () => meetingModal(detail)
-    }, [icon(ICONS.plus, 15), 'Toplanti planla']) : null),
+    }, [icon(ICONS.plus, 15), t('schedule_meeting')]) : null),
     list.length
       ? h('div', { class: 'cards' }, list.map((meeting) => meetingCard(meeting, detail, canManage)))
-      : emptyState('Toplanti yok', 'Sesli veya goruntulu bir toplanti planla; katilimcilar zamaninda katilabilir.')
+      : emptyState(t('meetings_empty'), t('meetings_empty_sub'))
   ]);
 }
 
@@ -472,12 +466,12 @@ export function meetingCard(meeting, detail, canManage) {
         h('div', { class: 'card-title', text: meeting.title }),
         h('div', { class: 'muted', text: [
           dateTimeLabel(meeting.startsAt),
-          `${meeting.durationMin} dk`,
-          meeting.groupName ? `grup: ${meeting.groupName}` : 'tum sirket'
+          t('minutes', { n: meeting.durationMin }),
+          meeting.groupName ? t('group_prefix', { name: meeting.groupName }) : t('whole_company')
         ].join(' · ') })
       ]),
-      meeting.status === 'live' ? h('span', { class: 'pill pill-danger', text: 'canli' })
-        : live ? h('span', { class: 'pill pill-warn', text: 'yaklasiyor' }) : null
+      meeting.status === 'live' ? h('span', { class: 'pill pill-danger', text: t('live') })
+        : live ? h('span', { class: 'pill pill-warn', text: t('soon') }) : null
     ]),
     meeting.description ? h('p', { class: 'card-desc', text: meeting.description }) : null,
     h('div', { class: 'card-actions' }, [
@@ -493,15 +487,15 @@ export function meetingCard(meeting, detail, canManage) {
             multi: true
           });
         })
-      }, [icon(meeting.kind === 'video' ? ICONS.video : ICONS.phone, 15), 'Katil']),
+      }, [icon(meeting.kind === 'video' ? ICONS.video : ICONS.phone, 15), t('join')]),
       canManage ? h('button', {
-        class: 'btn btn-sm btn-danger', text: 'Iptal',
-        onClick: () => confirmModal('Toplanti iptal edilsin mi?', meeting.title, async () => {
+        class: 'btn btn-sm btn-danger', text: t('delete'),
+        onClick: () => confirmModal(t('cancel_meeting_q'), meeting.title, async () => {
           await api.del(`/api/meetings/${meeting.id}`);
           await store.refreshMeetings();
           if (detail) await store.loadCompany(detail.company.id);
           store.notify();
-          toast('Toplanti iptal edildi.');
+          toast(t('meeting_cancelled'));
         })
       }) : null
     ])
@@ -509,20 +503,20 @@ export function meetingCard(meeting, detail, canManage) {
 }
 
 export function meetingModal(detail) {
-  openModal('Toplanti planla', (close) => {
-    const title = h('input', { placeholder: 'orn. Haftalik degerlendirme', required: true, maxlength: 120 });
-    const desc = h('input', { placeholder: 'aciklama (istege bagli)', maxlength: 300 });
+  openModal(t('schedule_meeting'), (close) => {
+    const title = h('input', { placeholder: t('meeting_title_ph'), required: true, maxlength: 120 });
+    const desc = h('input', { placeholder: t('meeting_desc_ph'), maxlength: 300 });
     const when = h('input', { type: 'datetime-local', value: toLocalInput(Date.now() + 3600000), required: true });
     const group = h('select', {}, [
-      h('option', { value: '', text: 'Tum sirket' }),
-      ...detail.groups.map((g) => h('option', { value: g.id, text: `Grup — ${g.name}` }))
+      h('option', { value: '', text: t('whole_company') }),
+      ...detail.groups.map((g) => h('option', { value: g.id, text: t('group_prefix', { name: g.name }) }))
     ]);
     const kind = h('select', {}, [
-      h('option', { value: 'audio', text: 'Sesli' }),
-      h('option', { value: 'video', text: 'Goruntulu' })
+      h('option', { value: 'audio', text: t('voice') }),
+      h('option', { value: 'video', text: t('video') })
     ]);
     const duration = h('select', {}, [15, 30, 45, 60, 90].map((min) => h('option', {
-      value: String(min), text: `${min} dk`, selected: min === 30
+      value: String(min), text: t('minutes', { n: min }), selected: min === 30
     })));
 
     return form(() => guard(async () => {
@@ -539,13 +533,13 @@ export function meetingModal(detail) {
       await store.loadCompany(detail.company.id);
       state.companyTab = 'meetings';
       store.notify();
-      toast('Toplanti planlandi; katilimcilara bildirildi.');
+      toast(t('meeting_scheduled'));
     }), [
-      field('Baslik', title),
-      field('Aciklama', desc),
-      h('div', { class: 'grid-2' }, [field('Zaman', when), field('Sure', duration)]),
-      h('div', { class: 'grid-2' }, [field('Katilimcilar', group), field('Tur', kind)]),
-      actions(close, 'Planla')
+      field(t('task_title'), title),
+      field(t('description'), desc),
+      h('div', { class: 'grid-2' }, [field(t('when'), when), field(t('duration'), duration)]),
+      h('div', { class: 'grid-2' }, [field(t('attendees'), group), field(t('kind'), kind)]),
+      actions(close, t('schedule_meeting'))
     ]);
   });
 }
@@ -557,20 +551,20 @@ export function meetingModal(detail) {
 function activitySection(detail) {
   const rows = detail.activity || [];
   return h('section', { class: 'sheet-section' }, [
-    sectionHead('Son aktiviteler'),
-    h('p', { class: 'muted', text: 'Sirkette kim ne yapti: uye, grup, gorev, toplanti ve davet islemleri.' }),
+    sectionHead(t('activity_title')),
+    h('p', { class: 'muted', text: t('activity_note') }),
     rows.length ? h('div', { class: 'feed' }, rows.map((row) => h('div', { class: 'feed-row' }, [
       avatarNode(row.actorNick, row.actorAvatar, { size: 'avatar-sm' }),
       h('div', { class: 'grow' }, [
         h('div', {}, [
           h('strong', { text: row.actorNick }),
-          h('span', { text: ` ${ACTIONS[row.action] || row.action}` }),
+          h('span', { text: ` ${ACTION_KEYS[row.action] ? t(ACTION_KEYS[row.action]) : row.action}` }),
           row.detail ? h('span', { class: 'feed-detail', text: ` ${row.detail}` }) : null
         ]),
         h('div', { class: 'row-sub', text: dateTimeLabel(row.at) })
       ]),
       h('span', { class: 'row-time', text: relTime(row.at) })
-    ]))) : emptyState('Kayit yok', 'Sirkette bir islem yapildiginda burada gorunur.')
+    ]))) : emptyState(t('activity_empty'), t('activity_empty_sub'))
   ]);
 }
 
@@ -587,12 +581,12 @@ async function changeLogo(detail) {
     await store.refreshAll();
     await store.loadCompany(detail.company.id);
     store.notify();
-    toast('Sirket logosu guncellendi.');
+    toast(t('logo_updated'));
   });
 }
 
 function companySettings(detail) {
-  openModal('Sirket ayarlari', (close) => {
+  openModal(t('company_settings'), (close) => {
     const name = h('input', { value: detail.company.name, required: true, maxlength: 60 });
     return form(() => guard(async () => {
       await api.patch(`/api/companies/${detail.company.id}`, { name: name.value });
@@ -600,23 +594,23 @@ function companySettings(detail) {
       await store.refreshAll();
       await store.loadCompany(detail.company.id);
       store.notify();
-      toast('Sirket guncellendi.');
+      toast(t('company_updated'));
     }), [
-      field('Sirket adi', name),
+      field(t('company_name'), name),
       h('div', { class: 'inline-row' }, [
-        h('button', { class: 'btn btn-sm', type: 'button', text: 'Logo yukle', onClick: () => { close(); changeLogo(detail); } })
+        h('button', { class: 'btn btn-sm', type: 'button', text: t('upload_logo'), onClick: () => { close(); changeLogo(detail); } })
       ]),
-      actions(close, 'Kaydet', h('button', {
-        class: 'btn btn-danger', type: 'button', text: 'Sirketi sil',
+      actions(close, t('save'), h('button', {
+        class: 'btn btn-danger', type: 'button', text: t('delete_company'),
         onClick: () => {
           close();
-          confirmModal('Sirket silinsin mi?', 'Gruplar, sohbetler, gorevler ve toplantilar kalici olarak silinir.', async () => {
+          confirmModal(t('delete_company_q'), t('delete_company_note'), async () => {
             await api.del(`/api/companies/${detail.company.id}`);
             state.nav = 'dm';
             state.companyDetail = null;
             await store.refreshAll();
             store.notify();
-            toast('Sirket silindi.');
+            toast(t('company_deleted'));
           });
         }
       }))

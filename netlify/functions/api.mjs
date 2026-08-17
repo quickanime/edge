@@ -39,18 +39,18 @@ export default async function handler(request) {
       await store.set(probe, { ok: true });
       const back = await store.get(probe);
       await store.del(probe);
-      return reply(200, { ok: true, store: back && back.ok ? 'blobs' : 'bozuk', runtime: 'netlify' });
+      return reply(200, { ok: true, store: back && back.ok ? 'blobs' : 'broken', runtime: 'netlify' });
     } catch (err) {
-      return reply(500, { ok: false, error: `Depo hatasi: ${err.message}` });
+      return reply(500, { ok: false, error: `Store error: ${err.message}` });
     }
   }
 
   let body = {};
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     const text = await request.text();
-    if (text.length > 8_000_000) return reply(413, { error: 'Govde cok buyuk.' });
+    if (text.length > 8_000_000) return reply(413, { error: 'Request body is too large.' });
     if (text) {
-      try { body = JSON.parse(text); } catch { return reply(400, { error: 'Gecersiz JSON.' }); }
+      try { body = JSON.parse(text); } catch { return reply(400, { error: 'Invalid JSON.' }); }
     }
   }
 
@@ -64,6 +64,6 @@ export default async function handler(request) {
     return reply(result.status, result.body);
   } catch (err) {
     console.error('edge islev hatasi:', err);
-    return reply(500, { error: 'Sunucu hatasi.' });
+    return reply(500, { error: 'Server error.' });
   }
 }

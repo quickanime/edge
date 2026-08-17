@@ -78,7 +78,7 @@ ok('iki kullanici kayit oldu (giris ekrani -> uygulama)');
 /* ---- profil fotosu ---- */
 await ada.page.click('[data-action="profile"]');
 const chooser = ada.page.waitForEvent('filechooser');
-await ada.page.click('#modal-body button:has-text("Foto sec")');
+await ada.page.click('#modal-body button:has-text("Choose photo")');
 await (await chooser).setFiles(photoPath);
 await ada.page.waitForSelector('#modal.is-hidden', { state: 'attached', timeout: 15000 });
 await ada.page.waitForSelector('#rail-me .avatar img', { timeout: 10000 });
@@ -86,19 +86,19 @@ ok('profil fotosu yuklendi ve sol seritte gorunuyor');
 
 /* ---- arkadaslik ---- */
 await ada.page.click('[data-nav="friends"]');
-await ada.page.click('.pane-head button:has-text("Arkadas ekle")');
+await ada.page.click('.pane-head button:has-text("Add friend")');
 await ada.page.fill('#modal-body input', kaan.nick);
 await ada.page.click('#modal-body button[type=submit]');
 await ada.page.waitForSelector('#modal.is-hidden', { state: 'attached', timeout: 12000 });
 
 await kaan.page.click('[data-nav="friends"]');
-await kaan.page.click('.list-item button:has-text("Kabul et")', { timeout: 15000 });
+await kaan.page.click('.list-item button:has-text("Accept")', { timeout: 15000 });
 await hasText(kaan.page, '.card-title', ada.nick);
 ok('arkadaslik istegi gonderildi ve kabul edildi');
 
 /* ---- DM: baloncuk hizalari, gorulduc, yaziyor ---- */
 await ada.page.click('[data-nav="friends"]');
-await ada.page.click('.card button:has-text("Mesaj")');
+await ada.page.click('.card button:has-text("Message")');
 await ada.page.waitForSelector('.composer textarea', { timeout: 15000 });
 await ada.page.fill('.composer textarea', 'kaan bu mesaj uctan uca sifreli');
 await ada.page.click('.composer .send');
@@ -114,15 +114,15 @@ ok(`alinan mesaj solda ve cozuldu: "${received.slice(0, 34)}..."`);
 
 // yazma gostergesi
 await kaan.page.click('.composer textarea');
-await kaan.page.type('.composer textarea', 'yaziyorum...', { delay: 30 });
+await kaan.page.type('.composer textarea', 'typing right now', { delay: 30 });
 await ada.page.waitForFunction(
-  () => (document.getElementById('typing-line') || {}).textContent.includes('yaziyor'),
+  () => (document.getElementById('typing-line') || {}).textContent.includes('typing'),
   null, { timeout: 12000 }
 );
 ok('"yaziyor..." gostergesi karsi tarafta gorundu');
 
 await kaan.page.click('.composer .send');
-await hasText(ada.page, '.bubble-text', 'yaziyorum');
+await hasText(ada.page, '.bubble-text', 'typing right now');
 await ada.page.waitForSelector('.receipt.is-seen', { timeout: 15000 });
 ok('gorulduc isareti (cift tik) dolu gorunuyor');
 
@@ -136,8 +136,26 @@ await ada.page.waitForSelector('.msg.is-mine .bubble-image img', { timeout: 2000
 await kaan.page.waitForSelector('.msg:not(.is-mine) .bubble-image img', { timeout: 20000 });
 ok('sifreli foto gonderildi ve karsi tarafta cozuldu');
 
+/* ---- dosya gonderme ---- */
+const docPath = path.join(OUT, 'notlar.txt');
+fs.writeFileSync(docPath, 'Edge test dosyasi\n'.repeat(40));
+const chooser3 = ada.page.waitForEvent('filechooser');
+await ada.page.click('.composer-icon:nth-of-type(2)');
+await (await chooser3).setFiles(docPath);
+await ada.page.waitForSelector('.composer-preview:not(.is-hidden)', { timeout: 12000 });
+await ada.page.click('.composer .send');
+await ada.page.waitForSelector('.msg.is-mine .file-card', { timeout: 20000 });
+await kaan.page.waitForSelector('.msg:not(.is-mine) .file-card', { timeout: 20000 });
+const fileName = await kaan.page.textContent('.msg:not(.is-mine) .file-name');
+if (!fileName.includes('notlar')) throw new Error('dosya adi gorunmedi: ' + fileName);
+const download = kaan.page.waitForEvent('download', { timeout: 20000 }).catch(() => null);
+await kaan.page.click('.msg:not(.is-mine) .file-card button');
+const saved = await download;
+if (saved) ok(`sifreli dosya gonderildi ve indirildi (${saved.suggestedFilename()})`);
+else ok('sifreli dosya gonderildi ve karsi tarafta gorundu');
+
 /* ---- gecici mesaj ---- */
-await ada.page.click('.pane-head [title="Gecici mesaj"]');
+await ada.page.click('.pane-head [title="Disappearing messages"]');
 await ada.page.selectOption('#modal-body select', '3600');
 await ada.page.click('#modal-body button[type=submit]');
 await ada.page.waitForSelector('.pane-head .pill-warn', { timeout: 12000 });
@@ -148,7 +166,7 @@ ok('gecici mesaj suresi ayarlandi ve mesajda saat isareti var');
 
 /* ---- ekran goruntusu bildirimi ---- */
 await ada.page.keyboard.press('PrintScreen');
-await hasText(kaan.page, '.sys-line', 'ekran goruntusu', 15000);
+await hasText(kaan.page, '.sys-line', 'screenshot', 15000);
 ok('ekran goruntusu bildirimi karsi tarafa dustu');
 
 /* ---- sirket + davet linki ---- */
@@ -159,11 +177,11 @@ await hasText(ada.page, '.pane-head h3', 'Edge Studio', 15000);
 const slug = (await ada.page.textContent('.pane-head .muted')).split('/').pop().trim();
 ok(`sirket olusturuldu, davet linki: /${slug}`);
 
-await ada.page.click('.sheet-head button:has-text("Grup olustur")');
-await ada.page.fill('#modal-body input', 'Tasarim');
+await ada.page.click('.sheet-head button:has-text("Create group")');
+await ada.page.fill('#modal-body input', 'Design');
 await ada.page.click('#modal-body button[type=submit]');
 await ada.page.waitForSelector('#modal.is-hidden', { state: 'attached', timeout: 15000 });
-await hasText(ada.page, '.card-title', 'Tasarim');
+await hasText(ada.page, '.card-title', 'Design');
 const groupSlug = (await ada.page.textContent('.link-row code')).replace('/', '');
 ok(`grup olusturuldu, kendi davet linki: /${groupSlug}`);
 
@@ -175,25 +193,28 @@ await kaan.page.waitForSelector('#unlock-form:not(.is-hidden)', { timeout: 20000
 await kaan.page.fill('#unlock-form input[name=password]', 'parola12345');
 await kaan.page.click('#unlock-form button[type=submit]');
 await kaan.page.waitForSelector('#app:not(.is-hidden)', { timeout: 25000 });
-await hasText(kaan.page, '.toast', 'katildin', 25000);
+await hasText(kaan.page, '.toast', 'joined', 25000);
 await kaan.page.waitForSelector('.rail-companies .rail-btn', { timeout: 15000 });
 ok('davet linkiyle katilma: davet hatirlandi, kilit acilinca gruba girildi');
 
 /* ---- yetki kisitlama ---- */
-await ada.page.click('.tabs-line button:has-text("Uyeler")');
-await ada.page.click('.list-item button:has-text("Erisim")', { timeout: 15000 });
-await ada.page.click('#modal-body .radio-card:has-text("Yonetici") input');
-const boxes = await ada.page.$$('#modal-body .perm-row input');
-await boxes[1].check();          // yalnizca "Gruplar" yetkisi
+await ada.page.click('.tabs-line button:has-text("Members")');
+await ada.page.click('.list-item button:has-text("Access")', { timeout: 15000 });
+await ada.page.locator('#modal-body .radio-card').nth(1).click();   // Admin
+await ada.page.waitForSelector('#modal-body .perm-list:not(.is-off)', { timeout: 10000 });
+// Etiket kutuyu sardigi icin tiklama etiket uzerinden yapilir (kullanicinin yaptigi gibi).
+await ada.page.locator('#modal-body .perm-row').nth(1).click();
+const checked = await ada.page.locator('#modal-body .perm-row input').nth(1).isChecked();
+if (!checked) throw new Error('yetki kutusu isaretlenemedi');
 await ada.page.click('#modal-body button[type=submit]');
-await hasText(ada.page, '.list-item .pill', 'yetki', 15000);
+await hasText(ada.page, '.list-item .pill', 'permission', 15000);
 ok('yonetim paneline erisim verildi, yetkiler tek tek kisitlandi (1/5)');
 
 /* ---- gorev panosu ---- */
-await ada.page.click('.tabs-line button:has-text("Gorevler")');
-await ada.page.click('.task-summary button:has-text("Gorev")');
+await ada.page.click('.tabs-line button:has-text("Tasks")');
+await ada.page.click('.task-summary button:has-text("Task")');
 await ada.page.fill('#modal-body input', 'Logoyu uygula');
-await ada.page.selectOption('#modal-body select', { label: 'Grup — Tasarim' });
+await ada.page.selectOption('#modal-body select', { label: 'Group — Design' });
 await ada.page.click('#modal-body button[type=submit]');
 await ada.page.waitForSelector('.board .tcard', { timeout: 15000 });
 const columns = await ada.page.$$eval('.board-col h5', (nodes) => nodes.map((n) => n.textContent));
@@ -205,24 +226,24 @@ await ada.page.waitForSelector('.col-done .tcard', { timeout: 15000 });
 ok('gorev tik ile "Biten" kolonuna gecti');
 
 /* ---- toplanti ---- */
-await ada.page.click('.tabs-line button:has-text("Toplantilar")');
-await ada.page.click('.sheet-head button:has-text("Toplanti planla")');
-await ada.page.fill('#modal-body input', 'Haftalik degerlendirme');
+await ada.page.click('.tabs-line button:has-text("Meetings")');
+await ada.page.click('.sheet-head button:has-text("Schedule meeting")');
+await ada.page.fill('#modal-body input', 'Weekly review');
 await ada.page.click('#modal-body button[type=submit]');
-await hasText(ada.page, '.card-title', 'Haftalik degerlendirme', 15000);
+await hasText(ada.page, '.card-title', 'Weekly review', 15000);
 ok('toplanti planlandi (sesli/goruntulu secimiyle)');
 
 /* ---- son aktiviteler ---- */
-await ada.page.click('.tabs-line button:has-text("Aktivite")');
+await ada.page.click('.tabs-line button:has-text("Activity")');
 await ada.page.waitForSelector('.feed-row', { timeout: 15000 });
 const feed = await ada.page.$$eval('.feed-row', (rows) => rows.length);
 ok(`yonetim panelinde son aktiviteler listelendi (${feed} kayit)`);
 
 /* ---- ekran goruntuleri ---- */
-await ada.page.click('.tabs-line button:has-text("Gorevler")');
+await ada.page.click('.tabs-line button:has-text("Tasks")');
 await ada.page.waitForTimeout(400);
 await ada.page.screenshot({ path: `${OUT}/edge-tasks.png` });
-await ada.page.click('.tabs-line button:has-text("Uyeler")');
+await ada.page.click('.tabs-line button:has-text("Members")');
 await ada.page.waitForTimeout(300);
 await ada.page.screenshot({ path: `${OUT}/edge-panel.png` });
 await ada.page.click('[data-nav="dm"]');
@@ -231,11 +252,11 @@ await ada.page.waitForTimeout(600);
 await ada.page.screenshot({ path: `${OUT}/edge-chat.png` });
 
 /* ---- sesli gorusme ---- */
-await ada.page.click('.pane-head [title="Sesli ara"]');
+await ada.page.click('.pane-head [title="Voice call"]');
 await ada.page.waitForSelector('.call-shell', { timeout: 20000 });
 await kaan.page.waitForSelector('#ring:not(.is-hidden)', { timeout: 20000 });
 await kaan.page.screenshot({ path: `${OUT}/edge-ring.png` });
-await kaan.page.click('#ring button:has-text("Katil")');
+await kaan.page.click('#ring button:has-text("Join")');
 await kaan.page.waitForSelector('.call-shell', { timeout: 20000 });
 ok('sesli gorusme baslatildi ve karsi taraf katildi');
 
@@ -253,15 +274,17 @@ await ada.page.screenshot({ path: `${OUT}/edge-call.png` });
 // Ekran paylasimi: kaynak secimi tarayiciya ait oldugu icin test ortaminda
 // dogrulanamayabilir; acildiysa kapatip devam ediyoruz.
 let shareOk = false;
-try {
-  await ada.page.click('.call-controls [title="Ekran paylas"]');
-  await ada.page.waitForSelector('.call-btn.is-on', { timeout: 6000 });
-  shareOk = true;
-  await ada.page.click('.call-btn.is-on');
-  await ada.page.waitForTimeout(500);
-} catch { /* kaynak secimi yok */ }
+if (process.env.EDGE_TEST_SCREENSHARE === '1') {
+  try {
+    await ada.page.click('.call-controls [title="Share screen"]');
+    await ada.page.waitForSelector('.call-btn.is-on', { timeout: 8000 });
+    shareOk = true;
+    await ada.page.click('.call-btn.is-on');
+    await ada.page.waitForTimeout(500);
+  } catch { /* kaynak secimi yok */ }
+}
 if (shareOk) ok('ekran paylasimi acilip kapatildi (video izi degistirildi)');
-else warn('ekran paylasimi test ortaminda dogrulanamadi (tarayici kaynak secimi ister)');
+else warn('ekran paylasimi atlandi: kaynak secimi tarayiciya ait (EDGE_TEST_SCREENSHARE=1 ile denenir)');
 
 // kapatan taraf: gorusme kapanir
 await ada.page.click('.call-btn.is-end');

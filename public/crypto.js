@@ -96,7 +96,7 @@ export function clearKeys() {
 }
 
 async function sharedKey(peerPublicKeyB64) {
-  if (!myPrivateKey) throw new Error('Anahtarlar kilitli.');
+  if (!myPrivateKey) throw new Error('Keys are locked.');
   const cached = sharedCache.get(peerPublicKeyB64);
   if (cached) return cached;
 
@@ -142,7 +142,7 @@ export async function encryptMessage(text, members, bytes = null) {
 }
 
 async function openMessageKey(message, senderPublicKey, usages) {
-  if (!message.key) throw new Error('Bu mesaj icin anahtar zarfi yok.');
+  if (!message.key) throw new Error('No key envelope for this message.');
   const sk = await sharedKey(senderPublicKey);
   const raw = await subtle.decrypt(
     { name: 'AES-GCM', iv: unb64(message.key.iv) }, sk, unb64(message.key.wrapped)
