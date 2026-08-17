@@ -10,12 +10,22 @@ import {
   now, id, token, seq, hashAuth, safeEqual, NICK_RE, SLUG_RE, cleanText, longText, isB64,
   HttpError, bad, denied, missing, slugCandidate, PERMS, normalizePerms, can, memberOf
 } from './util.mjs';
+import {
+  assertId, assertSlug, assertRoom, assertNickish, createLimiter, LIMITS,
+  serverSecret, decoySalt, burnCompare
+} from './security.mjs';
 
 const KDF_ITERS = 250000;
-const EVENT_TTL = 120000;      // olaylar iki dakika saklanir
-const CALL_TTL = 3600000;      // oda kayitlari bir saat sonra anlamsiz
+const EVENT_TTL = 120000;        // olaylar iki dakika saklanir
+const CALL_TTL = 3600000;        // oda kayitlari bir saat sonra anlamsiz
+const SESSION_TTL = 2592000000;  // oturum 30 gun sonra duser
+const MAX_KEY_ENVELOPES = 256;   // bir mesajdaki anahtar zarfi siniri
+const MAX_CIPHERTEXT = 200000;   // sifreli govde siniri (yaklasik 150 KB metin)
+const MAX_BLOB_B64 = 6000000;    // sifreli ek siniri (yaklasik 4.4 MB dosya)
 
 export function createApi(store) {
+  const limit = createLimiter(store);
+
   /* ---------------- depo yardimcilari ---------------- */
 
   const getUser = (userId) => store.get(`u/${userId}`);
@@ -130,6 +140,10 @@ export function createApi(store) {
     if (!t) throw new HttpError(401, 'Oturum gerekli.');
     const session = await store.get(`sess/${t}`);
     if (!session) throw new HttpError(401, 'Oturum gecersiz.');
+    if (now() - session.createdAt > SESSION_TTL) {
+      await store.del(`sess/${t}`);
+      throw new HttpError(401, 'Oturum suresi doldu, tekrar giris yap.');
+    }
     const user = await getUser(session.userId);
     if (!user) throw new HttpError(401, 'Oturum gecersiz.');
     return user;
@@ -339,9 +353,20 @@ export function createApi(store) {
   const route = (method, pattern, handler, options = {}) =>
     routes.push({ method, parts: pattern.split('/').filter(Boolean), handler, ...options });
 
+  /* ---- saglik kontrolu ---- */
+
+  route('GET', '/api/health', async () => {
+    const probe = `health/${seq()}`;
+    await store.set(probe, { ok: true });
+    const back = await store.get(probe);
+    await store.del(probe);
+    return { ok: Boolean(back && back.ok), store: 'hazir' };
+  }, { open: true });
+
   /* ---- kimlik ---- */
 
-  route('POST', '/auth/register', async ({ body }) => {
+  route('POST', '/auth/register', async ({ body, ip }) => {
+    await limit(`reg:${ip}`, LIMITS.register);
     const nick = cleanText(body.nick, 24);
     const displayName = cleanText(body.displayName, 40) || nick;
     const { authHash, kdfSalt, publicKey, encPrivKey } = body;
@@ -366,17 +391,32 @@ export function createApi(store) {
     return { token: sessionToken, user: publicUser(user), encPrivKey, kdfIters: KDF_ITERS };
   }, { open: true });
 
-  route('GET', '/auth/params/:nick', async ({ params }) => {
-    const userId = await store.get(`nick/${String(params.nick).toLowerCase()}`);
+  route('GET', '/auth/params/:nick', async ({ params, ip }) => {
+    await limit(`params:${ip}`, LIMITS.loginIp);
+    const nick = assertNickish(params.nick);
+    const userId = await store.get(`nick/${nick.toLowerCase()}`);
     const user = userId && await getUser(userId);
-    if (!user) throw bad('Kullanici bulunamadi.');
+    // Kullanici yoksa da tutarli bir tuz doner: "bu nick var mi" anlasilmaz.
+    if (!user) {
+      const secret = await serverSecret(store);
+      return { kdfSalt: decoySalt(secret, nick), kdfIters: KDF_ITERS };
+    }
     return { kdfSalt: user.kdfSalt, kdfIters: user.kdfIters };
   }, { open: true });
 
-  route('POST', '/auth/login', async ({ body }) => {
-    const userId = await store.get(`nick/${String(body.nick || '').toLowerCase()}`);
+  route('POST', '/auth/login', async ({ body, ip }) => {
+    const nickLower = String(body.nick || '').toLowerCase().slice(0, 24);
+    await limit(`loginip:${ip}`, LIMITS.loginIp);
+    await limit(`login:${nickLower}`, LIMITS.login);
+
+    const userId = nickLower && await store.get(`nick/${nickLower}`);
     const user = userId && await getUser(userId);
-    if (!user || !isB64(body.authHash, 500) || !safeEqual(hashAuth(body.authHash, user.authSalt), user.authHash)) {
+    if (!user) {
+      // Var olmayan kullanicida da ayni islem maliyeti odenir.
+      burnCompare(await serverSecret(store));
+      throw bad('Nick veya parola hatali.');
+    }
+    if (!isB64(body.authHash, 500) || !safeEqual(hashAuth(body.authHash, user.authSalt), user.authHash)) {
       throw bad('Nick veya parola hatali.');
     }
     const sessionToken = token();
@@ -408,6 +448,7 @@ export function createApi(store) {
   });
 
   route('GET', '/api/users', async ({ user, query }) => {
+    await limit(`search:${user.id}`, LIMITS.search);
     const q = cleanText(query.q, 32).toLowerCase();
     if (q.length < 2) return { users: [] };
     const keys = await store.list('nick/');
@@ -417,7 +458,8 @@ export function createApi(store) {
   });
 
   route('GET', '/api/users/:nick/profile', async ({ user, params }) => {
-    const targetId = await store.get(`nick/${String(params.nick).toLowerCase()}`);
+    await limit(`search:${user.id}`, LIMITS.search);
+    const targetId = await store.get(`nick/${assertNickish(params.nick).toLowerCase()}`);
     const target = targetId && await getUser(targetId);
     if (!target) throw missing('Kullanici bulunamadi.');
     return {
@@ -433,6 +475,7 @@ export function createApi(store) {
   /* ---- profil fotosu / sirket logosu ---- */
 
   route('POST', '/api/me/avatar', async ({ user, body }) => {
+    await limit(`avatar:${user.id}`, LIMITS.avatar);
     user.avatar = checkImage(body.dataUrl);
     await saveUser(user);
     const index = await userIndex(user.id);
@@ -446,6 +489,7 @@ export function createApi(store) {
   });
 
   route('POST', '/api/companies/:id/logo', async ({ user, params, body }) => {
+    await limit(`avatar:${user.id}`, LIMITS.avatar);
     const { company } = await requireCompany(params.id, user.id);
     if (company.ownerId !== user.id && !can(company, user.id, 'members')) {
       throw denied('Logoyu degistirme yetkin yok.');
@@ -477,6 +521,7 @@ export function createApi(store) {
   });
 
   route('POST', '/api/friends', async ({ user, body }) => {
+    await limit(`friend:${user.id}`, LIMITS.friend);
     const nick = cleanText(body.nick, 24).toLowerCase();
     const targetId = await store.get(`nick/${nick}`);
     const target = targetId && await getUser(targetId);
@@ -558,6 +603,7 @@ export function createApi(store) {
   });
 
   route('POST', '/api/companies', async ({ user, body }) => {
+    await limit(`company:${user.id}`, LIMITS.company);
     const name = cleanText(body.name, 60);
     if (name.length < 2) throw bad('Sirket adi en az 2 karakter olmali.');
     const slug = await uniqueSlug(body.slug || null);
@@ -816,6 +862,7 @@ export function createApi(store) {
   /* ---- davet linkleri ---- */
 
   route('POST', '/api/companies/:id/invites', async ({ user, params, body }) => {
+    await limit(`invite:${user.id}`, LIMITS.invite);
     const { company } = await requireCompany(params.id, user.id, 'invites');
     if (body.groupId && !company.groups.some((g) => g.id === body.groupId)) throw bad('Grup bu sirkete ait degil.');
     const slug = await uniqueSlug(body.slug || null);
@@ -837,7 +884,7 @@ export function createApi(store) {
   });
 
   route('DELETE', '/api/invites/:slug', async ({ user, params }) => {
-    const slug = String(params.slug).toLowerCase();
+    const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
     if (!invite) throw missing('Davet bulunamadi.');
     const { company } = await requireCompany(invite.companyId, user.id, 'invites');
@@ -851,8 +898,9 @@ export function createApi(store) {
   });
 
   /** Davet onizlemesi — giris yapmadan da gorunur. */
-  route('GET', '/api/invites/:slug', async ({ params }) => {
-    const slug = String(params.slug).toLowerCase();
+  route('GET', '/api/invites/:slug', async ({ params, ip }) => {
+    await limit(`invpeek:${ip}`, LIMITS.search);
+    const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
     if (!invite) throw missing('Davet bulunamadi veya kapatilmis.');
     const company = await getCompany(invite.companyId);
@@ -870,7 +918,8 @@ export function createApi(store) {
   }, { open: true });
 
   route('POST', '/api/invites/:slug/join', async ({ user, params }) => {
-    const slug = String(params.slug).toLowerCase();
+    await limit(`join:${user.id}`, LIMITS.join);
+    const slug = assertSlug(params.slug);
     const invite = await store.get(`inv/${slug}`);
     if (!invite) throw missing('Davet bulunamadi.');
     if (invite.disabled || (invite.maxUses > 0 && invite.uses >= invite.maxUses)) throw bad('Davet linki dolmus.');
@@ -984,16 +1033,21 @@ export function createApi(store) {
   });
 
   route('POST', '/api/conversations/:id/messages', async ({ user, params, body }) => {
+    await limit(`msg:${user.id}`, LIMITS.message);
     const conv = await requireConv(params.id, user.id);
 
     const system = body.system === 'screenshot' ? 'screenshot' : null;
     if (!system) {
-      if (!isB64(body.iv, 200) || !isB64(body.ciphertext)) throw bad('Sifreli govde gecersiz.');
+      if (!isB64(body.iv, 200) || !isB64(body.ciphertext, MAX_CIPHERTEXT)) throw bad('Sifreli govde gecersiz.');
       if (!Array.isArray(body.keys) || !body.keys.length) throw bad('Anahtar zarflari eksik.');
+    }
+    if (Array.isArray(body.keys) && body.keys.length > MAX_KEY_ENVELOPES) {
+      throw bad('Cok fazla anahtar zarfi.');
     }
 
     const keys = {};
     for (const k of (Array.isArray(body.keys) ? body.keys : [])) {
+      if (!k || typeof k !== 'object' || typeof k.userId !== 'string') continue;
       if (!conv.members.includes(k.userId)) continue;
       if (!isB64(k.iv, 200) || !isB64(k.wrapped, 4000)) throw bad('Anahtar zarfi gecersiz.');
       keys[k.userId] = { iv: k.iv, wrapped: k.wrapped };
@@ -1002,10 +1056,12 @@ export function createApi(store) {
     let attachment = null;
     if (body.attachment) {
       const a = body.attachment;
-      if (!a.blobId || !(await store.get(`blob/${conv.id}/${a.blobId}`))) throw bad('Ek bulunamadi.');
+      if (!a || typeof a !== 'object') throw bad('Ek bilgisi gecersiz.');
+      const blobId = assertId(a.blobId, 'ek kimligi');
+      if (!(await store.get(`blob/${conv.id}/${blobId}`))) throw bad('Ek bulunamadi.');
       if (!isB64(a.iv, 200)) throw bad('Ek anahtar bilgisi gecersiz.');
       attachment = {
-        blobId: String(a.blobId).slice(0, 64),
+        blobId,
         iv: a.iv,
         mime: ['image/jpeg', 'image/png', 'image/webp'].includes(a.mime) ? a.mime : 'image/jpeg',
         name: cleanText(a.name, 80),
@@ -1039,8 +1095,9 @@ export function createApi(store) {
 
   /** Sifreli gorsel yukleme: sunucu icerigi acamaz, yalnizca saklar. */
   route('POST', '/api/conversations/:id/blobs', async ({ user, params, body }) => {
+    await limit(`upload:${user.id}`, LIMITS.upload);
     const conv = await requireConv(params.id, user.id);
-    if (!isB64(body.data, 8_000_000)) throw bad('Dosya gecersiz veya cok buyuk (en cok ~5 MB).');
+    if (!isB64(body.data, MAX_BLOB_B64)) throw bad('Dosya gecersiz veya cok buyuk (en cok ~4 MB).');
     const blobId = id();
     await store.set(`blob/${conv.id}/${blobId}`, { data: body.data, uploadedBy: user.id, at: now() });
     return { blobId };
@@ -1073,6 +1130,7 @@ export function createApi(store) {
    * macOS kisayollari, sayfanin paylasima alinmasi) bunu bildirir.
    */
   route('POST', '/api/conversations/:id/notice', async ({ user, params, body }) => {
+    await limit(`notice:${user.id}`, LIMITS.notice);
     const conv = await requireConv(params.id, user.id);
     if (body.kind !== 'screenshot') throw bad('Bilinmeyen bildirim.');
     const createdAt = now();
@@ -1303,7 +1361,7 @@ export function createApi(store) {
      Sunucu yalnizca sifreli teklif/yanit paketlerini tasir.            */
 
   async function roomFor(user, body) {
-    if (body.conversationId) {
+    if (body && body.conversationId) {
       const conv = await requireConv(body.conversationId, user.id);
       return {
         roomId: `conv:${conv.id}`,
@@ -1311,7 +1369,8 @@ export function createApi(store) {
         title: conv.kind === 'group' ? 'Grup gorusmesi' : null
       };
     }
-    if (body.meetingId) {
+    if (body && body.meetingId) {
+      assertId(body.meetingId, 'toplanti kimligi');
       const companyId = await store.get(`midx/${body.meetingId}`);
       if (!companyId) throw missing('Toplanti bulunamadi.');
       const { company } = await requireCompany(companyId, user.id);
@@ -1395,9 +1454,9 @@ export function createApi(store) {
 
   /** Teklif/yanit/ICE paketleri: icerik istemcide sifrelenir, sunucu tasiyicidir. */
   route('POST', '/api/calls/signal', async ({ user, body }) => {
-    const roomId = String(body.roomId || '');
-    const toUserId = String(body.toUserId || '');
-    if (!roomId || !toUserId) throw bad('Sinyal hedefi eksik.');
+    await limit(`call:${user.id}`, LIMITS.call);
+    const { roomId } = assertRoom(body.roomId);
+    const toUserId = assertId(body.toUserId, 'hedef');
     const room = await store.get(`room/${roomId}`);
     if (!room) throw missing('Gorusme bulunamadi.');
     if (!room.participants.some((p) => p.userId === user.id)) throw denied('Bu gorusmede degilsin.');
@@ -1410,17 +1469,23 @@ export function createApi(store) {
   });
 
   route('GET', '/api/calls/state', async ({ user, query }) => {
-    const roomId = String(query.roomId || '');
-    const room = await store.get(`room/${roomId}`);
+    const parsed = assertRoom(query.roomId);
+    if (parsed.kind === 'conv') await requireConv(parsed.id, user.id);
+    else {
+      const companyId = await store.get(`midx/${parsed.id}`);
+      if (!companyId) throw missing('Toplanti bulunamadi.');
+      await requireCompany(companyId, user.id);
+    }
+    const room = await store.get(`room/${parsed.roomId}`);
     if (!room) return { room: null };
-    if (!roomId.startsWith('conv:') && !roomId.startsWith('meet:')) throw bad('Gecersiz oda.');
-    if (roomId.startsWith('conv:')) await requireConv(roomId.slice(5), user.id);
     return { room, participants: await publicUsers(room.participants.map((p) => p.userId)) };
   });
 
   /* ================================================================ */
   /* yonlendirici                                                     */
   /* ================================================================ */
+
+  const ID_PARAMS = new Set(['id', 'userId', 'groupId', 'taskId', 'meetingId', 'blobId']);
 
   function match(method, pathParts) {
     for (const r of routes) {
@@ -1445,14 +1510,27 @@ export function createApi(store) {
     const found = match(method.toUpperCase(), pathParts);
     if (!found) return { status: 404, body: { error: 'Bulunamadi.' } };
 
+    const ip = String(
+      headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || headers['x-real-ip'] || 'yerel'
+    ).split(',')[0].trim().slice(0, 45);
+
     try {
+      // Depo anahtarina girecek her kimlik once bicim denetiminden gecer.
+      for (const [key, value] of Object.entries(found.params)) {
+        if (ID_PARAMS.has(key)) assertId(value, key);
+        else if (key === 'slug') found.params.slug = assertSlug(value);
+        else if (key === 'nick') found.params.nick = assertNickish(value);
+      }
+
       let user = null;
       if (!found.route.open) {
         user = await authUser(headers);
         await touch(user);
       }
       const result = await found.route.handler({
-        user, params: found.params, query, body: body || {}, headers
+        user, params: found.params, query,
+        body: body && typeof body === 'object' ? body : {},
+        headers, ip
       });
       return { status: 200, body: result };
     } catch (err) {

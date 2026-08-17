@@ -5,8 +5,9 @@
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["core/**"]
 
-# API ve kimlik uc noktalari tek isleve gider.
+# API ve kimlik istekleri tek isleve gider. Islev, orijinal yolu URL'den okur.
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/api/:splat"
@@ -19,7 +20,7 @@
   status = 200
   force = true
 
-# Davet linkleri (ornek: /vertex) ve diger tum yollar uygulamayi acar.
+# Davet linkleri (ornek: /vertex, /u/nick) ve diger tum yollar uygulamayi acar.
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -29,6 +30,10 @@
   for = "/*"
   [headers.values]
     X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
     Referrer-Policy = "no-referrer"
-    Permissions-Policy = "camera=(self), microphone=(self), display-capture=(self)"
-    Content-Security-Policy = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Resource-Policy = "same-origin"
+    Permissions-Policy = "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=()"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
