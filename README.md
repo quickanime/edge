@@ -1,100 +1,129 @@
 # Edge
 
-Uctan uca sifreli, koyu ve minimal temali ekip mesajlasma platformu.
-Harici bir servise baglanmaz — sunucu, veritabani ve sifreleme tamamen bu depoda.
+End-to-end encrypted team messaging, calls, tasks and meetings — deployed on
+Netlify with no third-party services or API keys. The interface is English by
+default and switches to Turkish from the profile screen.
 
-## Neler var
+Türkçe özet: Edge, uçtan uca şifreli bir ekip mesajlaşma platformudur. Sunucu
+yalnızca şifreli veriyi saklar; anahtarlar cihazda kalır. Arayüz dili profil
+ekranından değiştirilir.
 
-- **Nick ile hesap.** Herkes kendi nickini secer (`3-24` karakter). Parola sunucuya
-  hicbir zaman gonderilmez.
-- **Uctan uca sifreli mesajlasma.** Birebir sohbetler ve grup kanallari; sifreleme
-  ve cozme yalnizca tarayicida olur.
-- **Sirket olusturma.** Sirketi kuran kisi sahibi olur; uye ekler, rol verir
-  (sahip / yonetici / uye).
-- **Sirket ici gruplar.** Her grup kendi sifreli sohbet kanalini alir.
-- **Gorev atama.** Gorev bir kisiye **veya** bir gruba atanir; oncelik, son tarih ve
-  durum (yapilacak / devam / bitti) tutulur. "Gorevlerim" ekrani sana ve uyesi
-  oldugun gruplara atanan her seyi bir arada gosterir.
-- **Canli akis.** Mesajlar, gorev degisiklikleri, cevrimici durumu ve "yaziyor..."
-  gostergesi WebSocket uzerinden aninda gelir.
-- **Koyu, ferah arayuz.** Tek vurgu rengi, ince cizgiler, ic ice menu yok: sol serit
-  (kimlik + sirketler), orta liste (sohbetler / kanallar), ana panel (sohbet veya
-  sirket paneli).
+## What it does
 
-## Kurulum
+- **End-to-end encrypted messaging** — direct chats and group channels. Text,
+  photos and files are encrypted in the browser; the server only stores
+  ciphertext.
+- **Voice, video and screen sharing** — WebRTC, peer to peer, with 720p/1080p/4K
+  selection. Signalling is relayed by the server but encrypted for the peer.
+- **Companies, groups and invite links** — every company and group gets a short
+  link id (for example `edgeishere.netlify.app/vertex`); people join through the
+  link instead of being added one by one. Links can be use-limited.
+- **Granular admin access** — the owner grants the admin panel and then narrows
+  it: members, groups, tasks, meetings, invites are separate permissions.
+- **Tasks** — a three-column board with drag and drop, priorities, due dates and
+  assignment to a person **or** a group. "My tasks" collects everything assigned
+  to you and to your groups.
+- **Meetings** — schedule a voice or video meeting for a group or the whole
+  company; attendees get a notification and can join with one click.
+- **Friends** — add someone by nickname; direct chat opens once accepted, or if
+  you already share a company.
+- **Extras** — read receipts, typing indicator, disappearing messages, profile
+  photos and company logos, activity log ("who did what"), and a best-effort
+  screenshot notice.
+
+## Run locally
 
 ```bash
 npm install
-npm start           # http://localhost:3000
+npm start            # http://localhost:3000
 ```
 
-`PORT` ile portu, `EDGE_DATA_DIR` ile veritabani klasorunu degistirebilirsin.
-Veritabani ilk caliştirmada `data/edge.db` olarak kendi kendine olusur.
+`PORT` changes the port, `EDGE_DATA_DIR` the local data directory. Locally the
+data lives in JSON files under `data/store`; on Netlify it lives in Netlify
+Blobs. The same core code runs in both.
 
-Gelistirme icin: `npm run dev` (dosya degisiminde yeniden baslar).
+## Deploy to Netlify
 
-## Sifreleme nasil calisiyor
+The repository is deploy-ready:
 
-| Adim | Ne oluyor |
+- `netlify.toml` publishes `public/`, routes `/api/*` and `/auth/*` to a single
+  function, sends every other path to `index.html` (so invite links work), and
+  sets the security headers.
+- `netlify/functions/api.mjs` is the whole backend; storage is Netlify Blobs, so
+  there is nothing to provision and no API key anywhere.
+
+Connect the repository in Netlify and deploy. To verify a deployment, open
+`/api/health` — it should return `{"ok":true,"store":"blobs"}`. If it returns
+HTML instead, the function did not deploy and the Netlify deploy log will say
+why.
+
+## How the encryption works
+
+| Step | What happens |
 | --- | --- |
-| Kayit | Tarayicida ECDH P-256 kimlik anahtari uretilir. Acik anahtar sunucuya gider; gizli anahtar `PBKDF2(parola, tuz, 250k)` ile turetilen anahtarla AES-GCM zarfina konur ve **sifreli** olarak saklanir. |
-| Giris | Sunucuya parola degil `PBKDF2(parola, "edge-auth\|nick")` turevi gonderilir; sunucu onu ayrica tuzlayip `scrypt` ile dogrular. Gizli anahtar zarfi indirilip yerelde acilir. |
-| Mesaj gonderme | Her mesaj icin rastgele AES-256-GCM anahtari uretilir. Icerik onunla sifrelenir; anahtar, her alici icin `ECDH + HKDF-SHA256` ile turetilen ortak sirla ayri ayri sarilir. |
-| Mesaj okuma | Alici kendi zarfini acar, mesaj anahtarini cikarir ve icerigi cozer. |
-| Dogrulama | Profil ve sohbet ekranindaki **parmak izi** (acik anahtarin SHA-256 ozeti) baska bir kanaldan karsilastirilarak kimlik dogrulanabilir. |
+| Sign up | The browser generates an ECDH P-256 identity key. The public key goes to the server; the private key is sealed with `PBKDF2(password, salt, 250k)` + AES-GCM and only the sealed blob is stored. |
+| Sign in | The server never sees the password — it receives `PBKDF2(password, "edge-auth\|nick")` and verifies it with a second salt and `scrypt`. The sealed private key is downloaded and opened locally. |
+| Sending | Each message gets a random AES-256-GCM key. The body is encrypted with it, and that key is wrapped separately for every recipient using `ECDH + HKDF-SHA256`. Photos and files reuse the same message key with their own IV. |
+| Reading | The recipient opens their own envelope, recovers the message key and decrypts. |
+| Calls | Media is peer to peer and encrypted by WebRTC itself (DTLS-SRTP). The offer/answer packets are additionally encrypted for the peer, so the server carries them blindly. |
+| Verifying | Profile and chat screens show a **fingerprint** of the public key; comparing it over another channel confirms who you are talking to. |
 
-Sunucunun gordugu tek sey sifreli govde ve zarflar; icerigi acacak anahtar hicbir
-zaman sunucuya gitmez. Sayfa yenilendiginde anahtarlar bellekten silinir, bu yuzden
-parola ile "kilit acma" ekrani gelir.
+Reloading the page clears the keys from memory, which is why an unlock screen
+asks for the password again.
 
-**Bilincli sinirlar:** gorev basliklari, sirket/grup adlari ve nickler sunucuda duz
-metin tutulur (listeleme, filtreleme ve yetki kontrolu bunlar uzerinden yapilir).
-Sifreli olan sey mesaj icerigidir. Gruba sonradan katilan biri, katilmadan onceki
-mesajlari cozemez.
+**Deliberate limits:** task titles, company and group names, nicknames and
+profile photos are stored in plain form — listing, filtering and permission
+checks run on them. What is encrypted is message content and attachments.
+Someone who joins a group later cannot read messages sent before they joined.
+Screenshot detection is best effort: browsers do not report screenshots, so only
+PrintScreen and the macOS shortcuts are caught — a phone camera never will be.
 
-## Mimari
+## Security
+
+`npm run test:security` throws 500+ attacks at a running server and fails if any
+of them succeeds: forged sessions, cross-account access (IDOR), privilege
+escalation, path traversal and injection in every id field, prototype pollution,
+forged senders and attachments, information leaks, oversized payloads, session
+reuse after sign-out, invite abuse, brute force and message flooding.
+
+Hardening in place:
+
+- every id that reaches a storage key is format-checked (32-hex, slug, room id)
+- sliding-window rate limits per user and per IP: sign-in, sign-up, search,
+  friend requests, invites, messages, uploads, images, calls, events
+- unknown nicknames get a consistent decoy salt and a constant-cost comparison,
+  so accounts cannot be enumerated
+- sessions expire after 30 days; message bodies, key envelope counts and file
+  sizes are capped
+- strict CSP (no external scripts, styles or fonts), HSTS, `frame-ancestors
+  'none'`, `nosniff`, COOP/CORP
+- authentication uses bearer tokens, not cookies, so CSRF does not apply
+
+## Layout
 
 ```
-server/
-  index.js     express + statik dosyalar + WebSocket baglantisi
-  db.js        SQLite semasi (kullanici, sirket, grup, sohbet, mesaj, gorev)
-  auth.js      kayit / giris / oturum dogrulama
-  api.js       sirket, grup, sohbet, mesaj ve gorev uc noktalari
-  realtime.js  WebSocket dagitimi (mesaj, gorev, presence, yaziyor)
-  util.js      kimlik uretimi, scrypt, dogrulama yardimcilari
-public/
-  index.html   uygulama iskeleti (giris ekrani + uc kolonlu kabuk)
-  styles.css   koyu tema
-  crypto.js    uctan uca sifreleme katmani (Web Crypto)
-  net.js       REST istekleri + WebSocket istemcisi
-  dom.js       kucuk DOM/ikon/tarih yardimcilari
-  app.js       arayuz mantigi (sohbet, sirket paneli, gorevler, diyaloglar)
-  logo.svg     Edge logosu
+core/          business logic shared by Netlify and local dev
+  api.mjs        routes: auth, companies, groups, chats, tasks, meetings, calls
+  security.mjs   validation, rate limiting, anti-enumeration
+  store.mjs      key/value storage: Netlify Blobs or local files
+  util.mjs       ids, hashing, permissions
+netlify/functions/api.mjs   the deployed backend
+server/dev.mjs              local server (static files + same core)
+public/        the app: i18n.js, crypto.js, net.js, store.js, chat.js,
+               panel.js, tasks.js, friends.js, call.js, media.js, app.js
+tests/         api.test.mjs · ui.test.mjs (two real browsers) · security.test.mjs
 ```
 
-Sunucu icerik guvenligi politikasi (CSP) ile calisir: harici script, stil veya font
-yuklenmez; her sey ayni kaynaktan servis edilir.
+## Tests
 
-## Uc noktalar (ozet)
+```bash
+npm start                 # in another terminal
+npm test                  # API and crypto flow: 20 checks
+npm run test:security     # 500+ attack attempts
+npm run test:ui           # two real browsers, end to end, including a WebRTC call
+```
 
-| Yontem | Yol | Aciklama |
-| --- | --- | --- |
-| `POST` | `/auth/register`, `/auth/login`, `/auth/logout` | hesap ve oturum |
-| `GET` | `/auth/params/:nick` | giris icin KDF parametreleri |
-| `GET/PATCH` | `/api/me` | profil |
-| `GET` | `/api/users?q=` | nick ile kullanici arama |
-| `GET/POST` | `/api/companies` | sirket listesi / olusturma |
-| `GET/PATCH/DELETE` | `/api/companies/:id` | sirket detayi ve yonetimi |
-| `POST/PATCH/DELETE` | `/api/companies/:id/members[/:userId]` | uye ve rol yonetimi |
-| `POST` | `/api/companies/:id/groups` | grup olusturma |
-| `PATCH/DELETE` | `/api/groups/:id` | grup duzenleme / silme |
-| `POST/DELETE` | `/api/groups/:id/members[/:userId]` | grup uyeligi |
-| `GET` | `/api/conversations` | sohbet listesi (okunmamis sayisiyla) |
-| `POST` | `/api/conversations/dm` | birebir sohbet ac |
-| `GET/POST` | `/api/conversations/:id/messages` | sifreli mesajlar |
-| `POST` | `/api/companies/:id/tasks` | gorev olusturma |
-| `GET` | `/api/tasks/mine` | sana ve gruplarina atanan gorevler |
-| `PATCH/DELETE` | `/api/tasks/:id` | gorev guncelleme / silme |
-
-Yetki kurallari: sirket sahibi her seyi yapar; yoneticiler uye/grup/gorev yonetir;
-uyeler kendilerine (veya grubuna) atanan gorevin durumunu degistirebilir.
+The UI test needs Playwright (`npm i -D playwright`) and a full Chromium build
+for camera and microphone access. Screen sharing is skipped unless
+`EDGE_TEST_SCREENSHARE=1` is set, because the source picker belongs to the
+browser. `EDGE_RATE_MULTIPLIER` widens the rate limits for repeated test runs.
